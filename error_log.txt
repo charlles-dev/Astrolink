@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "C:\Users\charl\OneDrive\Documentos\GitHub\Astrolink\backend\admin_routes.py", line 256, in admin_get_planos
+    return [{"id": p.id, "nome": p.nome, "duracao_minutos": p.duracao_minutos, "max_devices": p.max_devices, "preco": p.preco, "ativo": p.ativo} for p in planos]
+                                                                                              ^^^^^^^^^^^^^
+AttributeError: 'Plano' object has no attribute 'max_devices'
