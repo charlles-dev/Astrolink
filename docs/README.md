@@ -1,74 +1,60 @@
-# Documentação Astrolink
+# Astrolink Docs
 
-Bem-vindo à documentação do ecossistema Astrolink. Os documentos estão organizados em quatro categorias.
+Esta pasta documenta a base nova do Astrolink. O codigo legado anterior foi
+removido; a fonte de verdade agora e:
 
----
+- `node/`: backend local em Go.
+- `portal/`: portal cativo em SvelteKit.
+- `docs/`: especificacoes e decisoes tecnicas.
+- `docker-compose.dev.yml`: Postgres, Redis, RabbitMQ e pgAdmin para dev.
 
-## 📐 Specs (Especificações de Produto)
+Admin cloud, app mobile, marketplace e outros produtos continuam como direcao de
+produto, mas estao fora da implementacao imediata.
 
-Descrevem em detalhe cada produto/interface do ecossistema — telas, fluxos, comportamentos e endpoints consumidos.
+## Leitura Recomendada
 
-| Documento | Descrição |
+1. [Arquitetura de Software](Arquitetura%20de%20Software.md)
+2. [Setup local](dev/setup-local.md)
+3. [Referencia da API](technical/api-reference.md)
+4. [Schema do banco](technical/database-schema.md)
+5. [Integracao OpenWrt/OpenNDS](technical/openwrt-integration.md)
+6. [Portal cativo](specs/portal-cativo.md)
+7. [Admin local](specs/admin-local.md)
+
+## Specs
+
+| Documento | Status |
 |---|---|
-| [portal-cativo.md](specs/portal-cativo.md) | Interface que o usuário final vê ao conectar ao Wi-Fi |
-| [admin-local.md](specs/admin-local.md) | Painel administrativo local do operador |
-| [painel-cloud.md](specs/painel-cloud.md) | Painel SaaS multi-nó (Cloud Panel) |
-| [mapa-publico.md](specs/mapa-publico.md) | Site público de descoberta de hotspots |
-| [app-mobile.md](specs/app-mobile.md) | App Flutter para operadores |
-| [app-desktop.md](specs/app-desktop.md) | App Tauri para instalação em campo |
-| [cli.md](specs/cli.md) | CLI `astrolink` para SysAdmins |
-| [marketplace.md](specs/marketplace.md) | Marketplace de temas para o portal |
-| [hardware-box.md](specs/hardware-box.md) | Produto de hardware pré-configurado |
-| [pwa-usuario.md](specs/pwa-usuario.md) | PWA para usuário final gerenciar sua sessão |
+| [portal-cativo.md](specs/portal-cativo.md) | Em implementacao |
+| [admin-local.md](specs/admin-local.md) | Proxima etapa funcional |
+| [painel-cloud.md](specs/painel-cloud.md) | Pausado por enquanto |
+| [mapa-publico.md](specs/mapa-publico.md) | Futuro |
+| [app-mobile.md](specs/app-mobile.md) | Futuro |
+| [app-desktop.md](specs/app-desktop.md) | Futuro |
+| [cli.md](specs/cli.md) | Futuro |
+| [marketplace.md](specs/marketplace.md) | Futuro |
+| [hardware-box.md](specs/hardware-box.md) | Futuro |
+| [pwa-usuario.md](specs/pwa-usuario.md) | Futuro |
 
----
+## Technical
 
-## ⚙️ Technical (Documentação Técnica)
-
-Documentação de implementação: schemas, APIs, infraestrutura e decisões de arquitetura.
-
-| Documento | Descrição |
+| Documento | Uso |
 |---|---|
-| [database-schema.md](technical/database-schema.md) | Schema completo do banco local e Cloud |
-| [api-reference.md](technical/api-reference.md) | Referência completa da API Go (local) |
-| [infraestrutura.md](technical/infraestrutura.md) | Docker, deploy, systemd, CI/CD |
-| [openwrt-integration.md](technical/openwrt-integration.md) | Integração com OpenNDS e roteadores |
-| [seguranca.md](technical/seguranca.md) | Segurança, JWT, LGPD, OWASP |
-| [multi-tenancy.md](technical/multi-tenancy.md) | RLS, isolamento de tenants, roles |
-| [sincronizacao-realtime.md](technical/sincronizacao-realtime.md) | Sync Nó ↔ Cloud via RabbitMQ |
-| [notificacoes.md](technical/notificacoes.md) | Sistema de notificações (push, email, WhatsApp) |
+| [api-reference.md](technical/api-reference.md) | Endpoints existentes e backlog |
+| [database-schema.md](technical/database-schema.md) | Schema local em Postgres |
+| [infraestrutura.md](technical/infraestrutura.md) | Docker, runtime e deploy local |
+| [openwrt-integration.md](technical/openwrt-integration.md) | OpenNDS via SSH/`ndsctl` |
+| [seguranca.md](technical/seguranca.md) | Diretrizes de seguranca |
 
----
+Os documentos em `business/`, `technical/*cloud*`, `multi-tenancy`,
+`sincronizacao-realtime` e `notificacoes` continuam como material de produto e
+arquitetura futura. Eles nao devem guiar a implementacao desta fase.
 
-## 💼 Business (Documentação de Negócio)
+## Dev
 
-Estratégia, monetização e go-to-market.
-
-| Documento | Descrição |
+| Documento | Uso |
 |---|---|
-| [monetizacao.md](business/monetizacao.md) | Modelo Open Core, receitas, projections |
-| [precificacao.md](business/precificacao.md) | Planos detalhados, comparativo, políticas |
-| [go-to-market.md](business/go-to-market.md) | ICP, canais de aquisição, lançamento |
-
----
-
-## 🛠️ Dev (Guias para Desenvolvedores)
-
-Como configurar o ambiente, contribuir e manter padrões de qualidade.
-
-| Documento | Descrição |
-|---|---|
-| [setup-local.md](dev/setup-local.md) | Setup do ambiente de desenvolvimento |
-| [contribuindo.md](dev/contribuindo.md) | Como contribuir com o projeto |
-| [padroes-codigo.md](dev/padroes-codigo.md) | Convenções de código (Go, TypeScript, SQL) |
-| [testes.md](dev/testes.md) | Estratégia de testes e cobertura |
-
----
-
-## 📋 Documentos Raiz
-
-| Documento | Descrição |
-|---|---|
-| [ARCHITECTURE.md](../ARCHITECTURE.md) | Visão geral da arquitetura do ecossistema |
-| [ROADMAP.md](../ROADMAP.md) | Fases de desenvolvimento e marcos |
-
+| [setup-local.md](dev/setup-local.md) | Como rodar o projeto |
+| [testes.md](dev/testes.md) | Como validar backend e portal |
+| [contribuindo.md](dev/contribuindo.md) | Fluxo de contribuicao |
+| [padroes-codigo.md](dev/padroes-codigo.md) | Padroes de Go, TypeScript e SQL |

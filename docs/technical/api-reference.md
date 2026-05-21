@@ -1,599 +1,250 @@
-# Referência da API — Backend Go (Nó Local)
+# Referencia da API
 
-## Informações Gerais
+Base local:
 
-**Base URL (local):** `http://[ip-do-no]:5000`
-**Formato:** JSON
-**Autenticação:** Bearer JWT (rotas `/admin/*`) ou nenhuma (rotas públicas do portal)
-**Versão da API:** v1 (prefixo `/api/v1` planejado para futura versão)
-
----
-
-## Autenticação
-
-### `POST /admin/auth/login`
-
-```http
-POST /admin/auth/login
-Content-Type: application/json
-
-{
-  "usuario": "admin",
-  "senha": "minha_senha_segura",
-  "totp_code": "123456"   // opcional, se 2FA ativado
-}
+```text
+http://localhost:5000
 ```
 
-**Resposta 200:**
+Formato padrao: JSON.
+
+## Health
+
+### `GET /api/saude`
+
+Resposta:
+
 ```json
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "expires_in": 28800,
-  "token_type": "Bearer"
+  "status": "healthy",
+  "versao": "0.1.0",
+  "node": "dev-node-01",
+  "uptime_segundos": 0,
+  "database": "memory"
 }
 ```
 
-**Erros:**
-- `401` Credenciais inválidas
-- `429` Muitas tentativas (bloqueado por 10 min)
+`database` pode ser `memory`, `ok` ou `error`.
 
----
-
-### `POST /admin/auth/refresh`
-
-```http
-POST /admin/auth/refresh
-Content-Type: application/json
-
-{
-  "refresh_token": "eyJ..."
-}
-```
-
-**Resposta 200:** Mesmo formato do login.
-
----
-
-### `POST /admin/auth/logout`
-
-```http
-POST /admin/auth/logout
-Authorization: Bearer eyJ...
-```
-
-Invalida o refresh token atual. **Resposta 204.**
-
----
-
-## Portal Cativo (público)
+## Portal
 
 ### `GET /api/settings`
 
-Retorna configurações de white-label para o portal.
+Retorna configuracoes de white-label usadas pelo portal.
 
-**Cache:** 5 minutos (header `Cache-Control: public, max-age=300`)
+Resposta:
 
-**Resposta 200:**
 ```json
 {
-  "hotspot_nome": "Wi-Fi Pousada Recanto Verde",
-  "hotspot_logo_url": "/uploads/logo.png",
-  "cor_primaria": "#2ECC71",
-  "cor_fundo": "#0D1117",
-  "mensagem_boas_vindas": "Bem-vindo!",
-  "url_pos_conexao": "https://meusite.com.br",
-  "coleta_nome": false
+  "hotspot_nome": "Astrolink Wi-Fi",
+  "hotspot_logo_url": "",
+  "cor_primaria": "#06B6D4",
+  "cor_secundaria": "#0E7490",
+  "cor_fundo": "#0F172A",
+  "mensagem_boas_vindas": "Bem-vindo! Conecte-se e aproveite.",
+  "url_pos_conexao": "https://google.com",
+  "coleta_nome": false,
+  "mostrar_velocidade": true
 }
 ```
 
----
-
 ### `GET /api/planos`
 
-Lista planos disponíveis para o portal.
+Lista planos ativos e visiveis no portal.
 
-**Resposta 200:**
+Resposta:
+
 ```json
 {
   "planos": [
     {
-      "id": 1,
+      "id": 2,
       "nome": "Acesso 24 Horas",
-      "descricao": "Um dia completo de internet",
-      "preco": "15.00",
+      "descricao": "Um dia completo de internet.",
+      "preco": 15,
+      "preco_formatado": "15.00",
       "duracao_minutos": 1440,
       "duracao_formatada": "24 horas",
-      "dados_mb": null,
-      "recomendado": true,
       "velocidade_down": 10,
-      "velocidade_up": 5
-    },
-    {
-      "id": 2,
-      "nome": "Acesso 1 Hora",
-      "preco": "5.00",
-      "duracao_minutos": 60,
-      "duracao_formatada": "1 hora",
-      "recomendado": false,
-      "velocidade_down": 5,
-      "velocidade_up": 2
+      "velocidade_up": 5,
+      "recomendado": true,
+      "ativo": true,
+      "visivel_portal": true,
+      "ordem": 1
     }
   ]
 }
 ```
 
----
+### `GET /api/sessao/status?mac=AA:BB:CC:DD:EE:FF`
 
-### `GET /api/sessao/status`
+Retorna se o dispositivo tem sessao ativa.
 
-Verifica se o dispositivo já tem uma sessão ativa.
+Sem sessao:
 
-**Query params:** `mac=AA:BB:CC:DD:EE:FF`
-
-**Resposta 200 — com sessão:**
-```json
-{
-  "ativa": true,
-  "plano": "Acesso 24 Horas",
-  "fim_acesso": "2025-05-20T14:30:00Z",
-  "tempo_restante_segundos": 66600,
-  "dados_consumidos_mb": 1240
-}
-```
-
-**Resposta 200 — sem sessão:**
 ```json
 {
   "ativa": false
 }
 ```
 
----
+Com sessao:
 
-### `POST /api/pix/gerar`
-
-Inicia o fluxo de pagamento PIX.
-
-**Body:**
 ```json
 {
-  "plano_id": 1,
-  "mac": "AA:BB:CC:DD:EE:FF",
-  "ip": "192.168.1.50",
-  "nome": "João Silva"   // opcional
+  "ativa": true,
+  "plano": "Acesso 24 Horas",
+  "fim_acesso": "2026-05-21T15:00:00Z",
+  "tempo_restante_segundos": 3600,
+  "dados_consumidos_mb": 0
 }
 ```
 
-**Resposta 201:**
+### `POST /api/pix/gerar`
+
+Cria cobranca PIX demonstrativa.
+
+Body:
+
 ```json
 {
-  "txid": "ast_xxxxxxxxxxxxxxxxxxx",
+  "plano_id": 2,
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "ip": "192.168.1.50",
+  "nome": "Cliente"
+}
+```
+
+Resposta `201`:
+
+```json
+{
+  "txid": "ast_123",
   "valor": "15.00",
-  "descricao": "Astrolink Wi-Fi — Acesso 24 Horas",
-  "pix_copia_cola": "00020126580014br.gov.bcb.pix...",
-  "qr_code_base64": "data:image/png;base64,iVBORw0KGgo...",
-  "expira_em": "2025-05-19T15:02:00Z",
+  "descricao": "Astrolink Wi-Fi - Acesso 24 Horas",
+  "pix_copia_cola": "000201...",
+  "qr_code_base64": "data:image/svg+xml;base64,...",
+  "expira_em": "2026-05-21T15:15:00Z",
   "expira_em_segundos": 900
 }
 ```
 
-**Erros:**
-- `400` MAC inválido ou plano não encontrado
-- `402` Usuário está na blacklist
-- `429` Rate limit: máximo 3 cobranças pendentes por MAC
+### `GET /api/pix/status/:txid`
 
----
+Retorna status da cobranca PIX.
 
-### `GET /api/pix/aguardar/:txid`
-
-**Server-Sent Events** para aguardar confirmação de pagamento em tempo real.
-
-```http
-GET /api/pix/aguardar/ast_xxxx
-Accept: text/event-stream
-```
-
-**Eventos SSE:**
-```
-event: heartbeat
-data: {"timestamp": "2025-05-19T14:32:00Z"}
-
-event: status
-data: {"status": "pendente", "txid": "ast_xxxx"}
-
-event: aprovado
-data: {"status": "aprovado", "fim_acesso": "2025-05-20T14:32:00Z"}
-
-event: expirado
-data: {"status": "expirado"}
-```
-
-Conexão fechada pelo servidor após aprovação ou expiração.
-
-**Fallback (polling):** `GET /api/pix/status/:txid` retorna status atual sem SSE.
-
----
-
-### `POST /api/webhooks/mercadopago`
-
-Endpoint interno chamado pelo Mercado Pago ao confirmar pagamento.
-
-**Autenticação:** Verificação de assinatura HMAC com secret configurado.
+Resposta:
 
 ```json
 {
-  "action": "payment.updated",
-  "data": { "id": "1234567890" }
+  "txid": "ast_123",
+  "status": "pendente",
+  "expira_em": "2026-05-21T15:15:00Z"
 }
 ```
 
-**Fluxo interno após confirmação:**
-1. Consultar status do pagamento na API do MP
-2. Atualizar `transacoes_pix.status = 'aprovado'`
-3. Criar/atualizar `usuarios_mac` com status `ativo` e `fim_acesso`
-4. Executar `ndsctl auth <mac> <duration>` via SSH
-5. Aplicar regras de velocidade (`tc qdisc`)
-6. Publicar evento no RabbitMQ (sync com Cloud)
-7. Responder 200 para o Mercado Pago
+### `GET /api/pix/aguardar/:txid`
 
-**Resposta:** `200 OK` (mesmo em caso de erro interno — para evitar reenvio do webhook)
+Stream SSE simples para status do PIX.
 
----
+Eventos:
+
+```text
+event: status
+data: {"status":"pendente","txid":"ast_123"}
+```
 
 ### `POST /api/voucher/resgatar`
 
+Body:
+
 ```json
 {
-  "codigo": "ABCD-1234",
+  "codigo": "TEST-1234",
   "mac": "AA:BB:CC:DD:EE:FF",
   "ip": "192.168.1.50"
 }
 ```
 
-**Resposta 200 — sucesso:**
+Resposta:
+
 ```json
 {
   "sucesso": true,
   "plano": "Acesso 24 Horas",
   "tempo_adicionado_minutos": 1440,
-  "fim_acesso": "2025-05-20T14:32:00Z",
+  "fim_acesso": "2026-05-22T15:00:00Z",
   "tempo_restante_segundos": 86400,
-  "acesso_anterior": true   // true se já tinha sessão ativa (tempo adicionado)
+  "acesso_anterior": false,
+  "roteador_autorizado": true
 }
 ```
 
-**Erros:**
-- `404` Voucher não encontrado
-- `410` Voucher já utilizado (single use)
-- `422` Voucher expirado
-- `403` MAC na blacklist
+Erros comuns:
 
----
+| Status | `erro` | Caso |
+|---|---|---|
+| 400 | `validacao_falhou` | JSON invalido |
+| 404 | `nao_encontrado` | voucher nao encontrado |
+| 410 | `recurso_esgotado` | voucher ja utilizado |
+| 422 | `regra_negocio` | voucher expirado/inativo |
+| 500 | `erro_interno` | falha inesperada |
 
-## Admin — Usuários
+## Admin Local
 
-Todas as rotas `/admin/*` requerem `Authorization: Bearer {access_token}`.
+### `POST /admin/auth/login`
 
-### `GET /admin/usuarios`
-
-```
-Query params:
-  status    = ativo | expirado | bloqueado | walled_garden
-  page      = 1 (default)
-  limit     = 50 (default, max 200)
-  sort      = fim_acesso | created_at | dados_consumidos
-  order     = asc | desc
-  busca     = (MAC ou nome parcial)
-```
-
-**Resposta 200:**
-```json
-{
-  "total": 142,
-  "page": 1,
-  "limit": 50,
-  "usuarios": [
-    {
-      "id": 1,
-      "mac": "AA:BB:CC:DD:EE:FF",
-      "ip_atual": "192.168.1.50",
-      "nome": "João Silva",
-      "status": "ativo",
-      "plano": { "id": 1, "nome": "Acesso 24 Horas" },
-      "inicio_acesso": "2025-05-19T14:30:00Z",
-      "fim_acesso": "2025-05-20T14:30:00Z",
-      "tempo_restante_segundos": 66600,
-      "dados_consumidos_mb": 1240,
-      "roteador": { "id": 1, "nome": "Roteador Principal" }
-    }
-  ]
-}
-```
-
----
-
-### `GET /admin/usuarios/:mac`
-
-Detalhes completos incluindo histórico de sessões.
-
----
-
-### `POST /admin/usuarios/:mac/desconectar`
-
-```json
-{}  // body vazio
-```
-
-Executa `ndsctl deauth <mac>` via SSH. **Resposta 200.**
-
----
-
-### `POST /admin/usuarios/:mac/estender`
+Body:
 
 ```json
 {
-  "minutos": 120
+  "usuario": "admin",
+  "senha": "admin123"
 }
 ```
 
----
-
-### `POST /admin/usuarios/:mac/banir`
+Resposta:
 
 ```json
 {
-  "motivo": "Uso abusivo de banda"
+  "access_token": "...",
+  "refresh_token": "...",
+  "expires_in": 28800,
+  "token_type": "Bearer"
 }
-```
-
-Adiciona à blacklist e executa deauth. **Resposta 200.**
-
----
-
-## Admin — Planos
-
-### `GET /admin/planos`
-### `POST /admin/planos`
-### `PUT /admin/planos/:id`
-### `DELETE /admin/planos/:id`
-
-**Body (criar/editar):**
-```json
-{
-  "nome": "Acesso 48 Horas",
-  "descricao": "Dois dias de internet",
-  "preco": 25.00,
-  "duracao_minutos": 2880,
-  "dados_mb": null,
-  "velocidade_down": 10,
-  "velocidade_up": 5,
-  "recomendado": false,
-  "ativo": true,
-  "visivel_portal": true,
-  "ordem": 3
-}
-```
-
----
-
-## Admin — Vouchers
-
-### `GET /admin/vouchers`
-### `POST /admin/vouchers/gerar`
-
-```json
-{
-  "plano_id": 1,
-  "quantidade": 50,
-  "tipo": "single_use",
-  "usos_maximos": null,
-  "validade_dias": 30,
-  "prefixo": "VIP"
-}
-```
-
-**Resposta 201:**
-```json
-{
-  "lote_id": 12,
-  "quantidade": 50,
-  "codigos": ["VIPABCD-1234", "VIPEFGH-5678", "..."]
-}
-```
-
-### `GET /admin/vouchers/exportar`
-
-```
-Query params: lote_id=12&formato=pdf|csv
-```
-
-Retorna arquivo para download.
-
-### `DELETE /admin/vouchers/:codigo`
-
-Desativa o voucher.
-
----
-
-## Admin — Pagamentos
-
-### `GET /admin/pagamentos`
-
-```
-Query params:
-  de = 2025-05-01 (data ISO)
-  ate = 2025-05-31
-  status = aprovado | pendente | cancelado | expirado
-  page = 1
-  limit = 50
-```
-
-### `GET /admin/pagamentos/relatorio`
-
-```
-Query params: de=2025-05-01&ate=2025-05-31&formato=json|csv|pdf
-```
-
----
-
-## Admin — Rede
-
-### `GET /admin/rede/roteadores`
-### `POST /admin/rede/roteadores`
-### `PUT /admin/rede/roteadores/:id`
-### `DELETE /admin/rede/roteadores/:id`
-
-### `POST /admin/rede/roteadores/:id/diagnostico`
-
-Retorna resultado de ping, uptime, versão OpenWrt/OpenNDS.
-
-### `POST /admin/rede/roteadores/:id/speedtest`
-
-Executa teste de velocidade no uplink do roteador.
-
-### `GET /admin/rede/blacklist`
-### `POST /admin/rede/blacklist`
-```json
-{ "mac": "AA:BB:CC:DD:EE:FF", "motivo": "Spam" }
-```
-### `DELETE /admin/rede/blacklist/:mac`
-
-### `GET /admin/rede/walled-garden`
-### `POST /admin/rede/walled-garden`
-```json
-{ "host": "meusite.com.br", "descricao": "Site do estabelecimento" }
-```
-### `DELETE /admin/rede/walled-garden/:id`
-
----
-
-## Admin — Sistema
-
-### `GET /admin/sistema/settings`
-### `PUT /admin/sistema/settings`
-
-```json
-{
-  "hotspot_nome": "Wi-Fi Recanto Verde",
-  "cor_primaria": "#2ECC71",
-  "mp_access_token": "APP_USR-XXX"
-}
-```
-
-### `GET /admin/sistema/backup`
-
-Retorna arquivo `.sql.gz` para download.
-
-### `POST /admin/sistema/restore`
-
-Upload de arquivo `.sql.gz` para restauração.
-`Content-Type: multipart/form-data`
-
-### `GET /admin/sistema/logs`
-
-```
-Query params:
-  nivel = INFO | WARN | ERROR
-  categoria = auth | payment | network | system | admin
-  de = (ISO datetime)
-  ate = (ISO datetime)
-  page = 1
-  limit = 100
 ```
 
 ### `GET /admin/sistema/saude`
 
-Health check detalhado.
+Retorna health detalhado do no local.
 
-**Resposta 200:**
-```json
-{
-  "status": "healthy",
-  "versao": "1.2.0",
-  "uptime_segundos": 1209600,
-  "checks": {
-    "banco_dados": { "status": "ok", "latencia_ms": 2 },
-    "redis": { "status": "ok", "latencia_ms": 1 },
-    "rabbitmq": { "status": "ok" },
-    "mercadopago": { "status": "ok" },
-    "roteadores": {
-      "total": 4,
-      "online": 3,
-      "offline": 1
-    }
-  }
-}
-```
+### `GET /admin/planos`
 
----
+Lista todos os planos.
 
-## WebSocket — Admin Real-time
+### `GET /admin/usuarios`
 
-```
-ws://[host]:5000/admin/ws?token=[jwt]
-```
+Lista usuarios conhecidos.
 
-### Eventos enviados pelo servidor
+### `POST /admin/usuarios/:mac/desconectar`
 
-```typescript
-// Usuário conectou
-{ event: "user.connected", data: { mac, plano, ip, roteador_id } }
+Desconecta o MAC no OpenNDS quando gateway real esta habilitado.
 
-// Usuário desconectou/expirou
-{ event: "user.expired", data: { mac, motivo: "expired" | "manual" | "banned" } }
-
-// Pagamento aprovado
-{ event: "payment.approved", data: { mac, valor, plano, txid } }
-
-// Métricas periódicas (a cada 10s)
-{ event: "metrics.update", data: {
-    usuarios_ativos: 23,
-    receita_hoje: 345.00,
-    banda_down_mbps: 45.2,
-    banda_up_mbps: 8.1
-  }
-}
-
-// Status de roteador mudou
-{ event: "router.status", data: { id, nome, status: "online" | "offline", latencia_ms } }
-
-// Voucher resgatado
-{ event: "voucher.redeemed", data: { codigo, mac, plano } }
-```
-
----
-
-## Erros Padrão
+Resposta:
 
 ```json
 {
-  "erro": "Código de erro snake_case",
-  "mensagem": "Descrição amigável do erro",
-  "detalhes": { }   // opcional, para validação de campos
+  "sucesso": true
 }
 ```
 
-| HTTP | erro | Situação |
-|---|---|---|
-| 400 | `validacao_falhou` | Dados inválidos no body |
-| 401 | `nao_autenticado` | Token ausente ou inválido |
-| 403 | `acesso_negado` | Permissão insuficiente |
-| 404 | `nao_encontrado` | Recurso não existe |
-| 409 | `conflito` | Recurso já existe (ex: MAC duplicado) |
-| 410 | `recurso_esgotado` | Voucher já usado |
-| 422 | `regra_negocio` | Violação de regra de negócio |
-| 429 | `rate_limit` | Muitas requisições |
-| 500 | `erro_interno` | Erro inesperado no servidor |
+## Backlog da API
 
----
-
-## Rate Limiting
-
-| Endpoint | Limite |
-|---|---|
-| `POST /api/pix/gerar` | 5/minuto por MAC |
-| `POST /api/voucher/resgatar` | 10/minuto por IP |
-| `POST /admin/auth/login` | 5/minuto por IP |
-| Admin geral | 300/minuto por token |
-| Webhooks | Sem limite |
+- JWT real e middleware de autenticacao.
+- CRUD de planos.
+- Geracao e exportacao de vouchers.
+- Webhook real do Mercado Pago.
+- Relatorios de pagamento.
+- Backup/restore.
+- WebSocket ou SSE para admin local.
+- Jobs de expiracao e sincronizacao futura.
