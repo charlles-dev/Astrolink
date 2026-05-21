@@ -49,6 +49,7 @@ URLs:
 - Backend: `http://localhost:5000`
 - Health: `http://localhost:5000/api/saude`
 - Portal: `http://127.0.0.1:5173/?mac=AA:BB:CC:DD:EE:FF&ip=192.168.1.50&token=test`
+- Painel local: `http://127.0.0.1:5173/painel`
 
 ## Variaveis de Ambiente
 

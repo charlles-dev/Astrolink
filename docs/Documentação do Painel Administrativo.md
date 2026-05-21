@@ -5,8 +5,13 @@
 O admin cloud esta pausado. Esta documentacao trata apenas do admin local do no
 Astrolink.
 
-Nesta fase existe API inicial de admin no backend Go, mas ainda nao existe app
-visual dedicada para o painel local.
+Nesta fase existe uma primeira interface visual do admin local no app SvelteKit:
+
+```text
+http://127.0.0.1:5173/painel
+```
+
+Ela usa as credenciais configuradas em `ADMIN_USUARIO` e `ADMIN_SENHA`.
 
 ## Endpoints Implementados
 
@@ -59,16 +64,24 @@ Lista ate 200 usuarios conhecidos pelo no local.
 
 Chama o gateway OpenNDS para executar `ndsctl deauth <mac>` quando habilitado.
 
-## Proxima Etapa Recomendada
+## Tela Implementada
 
-Implementar o painel local visual, provavelmente em uma nova pasta `admin/`,
-com estes blocos:
+O painel local inicial cobre:
 
 - login simples
 - dashboard de saude
 - tabela de usuarios
 - botao de desconectar usuario
 - lista de planos
+
+## Proxima Etapa Recomendada
+
+Evoluir o admin local com:
+
 - geracao/listagem de vouchers
+- CRUD de planos
+- status real do roteador
+- autenticacao JWT real
+- logs de auditoria
 
 O admin cloud continua fora desta fase.

@@ -1,5 +1,9 @@
 import type {
   GerarPixBody,
+  AdminHealthResponse,
+  AdminLoginBody,
+  AdminLoginResponse,
+  AdminUsersResponse,
   PixStatusResponse,
   PixTransaction,
   PlanosResponse,
@@ -27,10 +31,19 @@ export class APIError extends Error {
 }
 
 export function createApiClient(baseURL = '') {
-  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async function request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    token?: string
+  ): Promise<T> {
+    const headers: Record<string, string> = {}
+    if (body) headers['Content-Type'] = 'application/json'
+    if (token) headers.Authorization = `Bearer ${token}`
+
     const response = await fetch(`${baseURL}${path}`, {
       method,
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      headers: Object.keys(headers).length ? headers : undefined,
       body: body ? JSON.stringify(body) : undefined
     })
 
@@ -58,7 +71,22 @@ export function createApiClient(baseURL = '') {
     getPixStatus: (txid: string) =>
       request<PixStatusResponse>('GET', `/api/pix/status/${encodeURIComponent(txid)}`),
     resgatarVoucher: (body: ResgatarVoucherBody) =>
-      request<ResgatarVoucherResponse>('POST', '/api/voucher/resgatar', body)
+      request<ResgatarVoucherResponse>('POST', '/api/voucher/resgatar', body),
+    loginAdmin: (body: AdminLoginBody) =>
+      request<AdminLoginResponse>('POST', '/admin/auth/login', body),
+    getAdminHealth: (token: string) =>
+      request<AdminHealthResponse>('GET', '/admin/sistema/saude', undefined, token),
+    getAdminPlanos: (token: string) =>
+      request<PlanosResponse>('GET', '/admin/planos', undefined, token),
+    getAdminUsuarios: (token: string) =>
+      request<AdminUsersResponse>('GET', '/admin/usuarios', undefined, token),
+    disconnectAdminUsuario: (token: string, mac: string) =>
+      request<{ sucesso: boolean }>(
+        'POST',
+        `/admin/usuarios/${encodeURIComponent(mac)}/desconectar`,
+        {},
+        token
+      )
   }
 }
 

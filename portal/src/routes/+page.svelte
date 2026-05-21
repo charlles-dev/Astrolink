@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
 
-  import '../app.css'
   import { APIError, api } from '$lib/api'
   import type {
     DeviceInfo,
