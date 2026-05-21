@@ -104,7 +104,7 @@ describe('AdminDashboard', () => {
     expect(onDisconnect).toHaveBeenCalledWith('AA:BB:CC:DD:EE:FF')
   })
 
-  it('submits voucher generation form', async () => {
+  it('submits single-use voucher generation with validity days', async () => {
     const onGenerateVouchers = vi.fn()
 
     render(AdminDashboard, {
@@ -139,12 +139,63 @@ describe('AdminDashboard', () => {
 
     await fireEvent.input(screen.getByLabelText('Prefixo'), { target: { value: 'BARCO' } })
     await fireEvent.input(screen.getByLabelText('Quantidade'), { target: { value: '3' } })
+    await fireEvent.input(screen.getByLabelText('Validade (dias)'), { target: { value: '7' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Gerar vouchers' }))
 
     expect(onGenerateVouchers).toHaveBeenCalledWith({
       plano_id: 2,
       quantidade: 3,
+      tipo: 'single_use',
+      validade_dias: 7,
       prefixo: 'BARCO'
+    })
+  })
+
+  it('submits universal voucher generation with max uses', async () => {
+    const onGenerateVouchers = vi.fn()
+
+    render(AdminDashboard, {
+      props: {
+        health: null,
+        planos: [
+          {
+            id: 2,
+            nome: 'Acesso 24 Horas',
+            preco: '15.00',
+            duracao_minutos: 1440,
+            duracao_formatada: '24 horas',
+            dados_mb: null,
+            velocidade_down: 10,
+            velocidade_up: 5,
+            recomendado: true,
+            ativo: true,
+            visivel_portal: true,
+            ordem: 1
+          }
+        ],
+        vouchers: [],
+        usuarios: [],
+        loading: false,
+        actionMessage: '',
+        onRefresh: vi.fn(),
+        onDisconnect: vi.fn(),
+        onGenerateVouchers,
+        onLogout: vi.fn()
+      }
+    })
+
+    await fireEvent.click(screen.getByLabelText('Universal'))
+    await fireEvent.input(screen.getByLabelText('Prefixo'), { target: { value: 'pub' } })
+    await fireEvent.input(screen.getByLabelText('Quantidade'), { target: { value: '4' } })
+    await fireEvent.input(screen.getByLabelText('Usos maximos'), { target: { value: '25' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Gerar vouchers' }))
+
+    expect(onGenerateVouchers).toHaveBeenCalledWith({
+      plano_id: 2,
+      quantidade: 4,
+      tipo: 'universal',
+      usos_maximos: 25,
+      prefixo: 'PUB'
     })
   })
 })

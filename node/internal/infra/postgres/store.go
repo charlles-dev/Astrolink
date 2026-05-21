@@ -367,6 +367,59 @@ func (s *Store) GenerateVouchers(ctx context.Context, input store.GenerateVouche
 	}, nil
 }
 
+func (s *Store) CreateAdminSession(ctx context.Context, input store.CreateAdminSessionInput) error {
+	now := s.clock().UTC()
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO sessoes_admin (usuario, refresh_token, ip, user_agent, expira_em, revogado, created_at)
+		VALUES ($1, $2, NULLIF($3, '')::inet, $4, $5, FALSE, $6)`,
+		input.Usuario, input.RefreshTokenHash, input.IP, input.UserAgent, input.ExpiresAt, now)
+	if err != nil {
+		return fmt.Errorf("criar sessao admin: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) RotateAdminSession(ctx context.Context, input store.RotateAdminSessionInput) (store.AdminSession, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.AdminSession{}, false, fmt.Errorf("iniciar transacao sessao admin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	session, err := selectAdminSession(ctx, tx, input.CurrentRefreshTokenHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.AdminSession{}, false, nil
+	}
+	if err != nil {
+		return store.AdminSession{}, false, err
+	}
+	if session.Revoked || !session.ExpiresAt.After(input.Now) {
+		return store.AdminSession{}, false, nil
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE sessoes_admin SET revogado = TRUE WHERE refresh_token = $1`, input.CurrentRefreshTokenHash); err != nil {
+		return store.AdminSession{}, false, fmt.Errorf("revogar sessao admin atual: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO sessoes_admin (usuario, refresh_token, ip, user_agent, expira_em, revogado, created_at)
+		VALUES ($1, $2, NULLIF($3, '')::inet, $4, $5, FALSE, $6)`,
+		session.Usuario, input.NextRefreshTokenHash, input.IP, input.UserAgent, input.ExpiresAt, input.Now); err != nil {
+		return store.AdminSession{}, false, fmt.Errorf("criar sessao admin renovada: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return store.AdminSession{}, false, fmt.Errorf("commit sessao admin: %w", err)
+	}
+	return session, true, nil
+}
+
+func (s *Store) RevokeAdminSession(ctx context.Context, refreshTokenHash string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE sessoes_admin SET revogado = TRUE WHERE refresh_token = $1`, refreshTokenHash)
+	if err != nil {
+		return fmt.Errorf("revogar sessao admin: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) Health(ctx context.Context) store.Health {
 	start := time.Now()
 	err := s.db.PingContext(ctx)
@@ -469,6 +522,15 @@ func selectUsuario(ctx context.Context, q queryer, mac string, now time.Time) (s
 		return store.Usuario{}, false, err
 	}
 	return usuario, true, nil
+}
+
+func selectAdminSession(ctx context.Context, q queryer, refreshTokenHash string) (store.AdminSession, error) {
+	row := q.QueryRowContext(ctx, `
+		SELECT id::text, usuario, refresh_token, COALESCE(ip::text, ''), COALESCE(user_agent, ''), expira_em, revogado, created_at
+		FROM sessoes_admin
+		WHERE refresh_token = $1
+		FOR UPDATE`, refreshTokenHash)
+	return scanAdminSession(row)
 }
 
 type scanner interface {
@@ -600,6 +662,23 @@ func scanAdminVoucher(row scanner) (store.AdminVoucher, error) {
 		voucher.LoteID = &value
 	}
 	return voucher, nil
+}
+
+func scanAdminSession(row scanner) (store.AdminSession, error) {
+	var session store.AdminSession
+	if err := row.Scan(
+		&session.ID,
+		&session.Usuario,
+		&session.RefreshTokenHash,
+		&session.IP,
+		&session.UserAgent,
+		&session.ExpiresAt,
+		&session.Revoked,
+		&session.CreatedAt,
+	); err != nil {
+		return store.AdminSession{}, err
+	}
+	return session, nil
 }
 
 func applySettings(settings *store.Settings, values map[string]string) {

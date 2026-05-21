@@ -49,6 +49,9 @@ URLs locais:
 - `GET /api/pix/aguardar/:txid`
 - `POST /api/voucher/resgatar`
 - `POST /admin/auth/login`
+- `POST /admin/auth/refresh`
+- `POST /admin/auth/logout`
+- `GET /admin/auth/me`
 - `GET /admin/sistema/saude`
 - `GET /admin/planos`
 - `GET /admin/usuarios`

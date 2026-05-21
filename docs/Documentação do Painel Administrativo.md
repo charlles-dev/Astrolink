@@ -12,10 +12,11 @@ http://127.0.0.1:5173/painel
 ```
 
 Ela usa as credenciais configuradas em `ADMIN_USUARIO` e `ADMIN_SENHA`.
+As rotas admin, exceto login e refresh, exigem `Authorization: Bearer <access_token>`.
 
 ## Endpoints Implementados
 
-### Login
+### Autenticacao
 
 `POST /admin/auth/login`
 
@@ -37,7 +38,20 @@ Resposta:
 }
 ```
 
-O token atual e simples e temporario. JWT real ainda e backlog.
+O access token e um JWT HS256 com validade de 8 horas. O refresh token e opaco,
+armazenado como hash no no local, com validade de 30 dias.
+
+`POST /admin/auth/refresh`
+
+Renova access token e refresh token.
+
+`POST /admin/auth/logout`
+
+Revoga o refresh token informado. Requer Bearer token.
+
+`GET /admin/auth/me`
+
+Retorna o usuario autenticado.
 
 ### Saude do Sistema
 
@@ -78,6 +92,8 @@ Gera um lote de vouchers para venda presencial.
 {
   "plano_id": 2,
   "quantidade": 10,
+  "tipo": "single_use",
+  "validade_dias": 30,
   "prefixo": "VIP"
 }
 ```
@@ -91,7 +107,7 @@ O painel local inicial cobre:
 - tabela de usuarios
 - botao de desconectar usuario
 - lista de planos
-- geracao e listagem de vouchers
+- geracao e listagem de vouchers, incluindo validade e tipo universal
 
 ## Proxima Etapa Recomendada
 
@@ -100,7 +116,6 @@ Evoluir o admin local com:
 - CRUD de planos
 - exportacao/impressao de vouchers
 - status real do roteador
-- autenticacao JWT real
 - logs de auditoria
 
 O admin cloud continua fora desta fase.

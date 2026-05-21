@@ -65,6 +65,7 @@
       usuarios = nextUsuarios.usuarios
       vouchers = nextVouchers.vouchers
     } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
       actionMessage = messageFromError(error, 'Nao foi possivel carregar o painel')
     } finally {
       loading = false
@@ -80,6 +81,7 @@
       await loadDashboard()
       actionMessage = `${mac} desconectado do roteador`
     } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
       actionMessage = messageFromError(error, 'Nao foi possivel desconectar o usuario')
     } finally {
       loading = false
@@ -98,6 +100,7 @@
           ? '1 voucher gerado'
           : `${result.quantidade} vouchers gerados`
     } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
       actionMessage = messageFromError(error, 'Nao foi possivel gerar vouchers')
     } finally {
       loading = false
@@ -105,13 +108,26 @@
   }
 
   function logout() {
+    resetSession()
+    actionMessage = ''
+    loginError = ''
+  }
+
+  function resetSession() {
     sessionStorage.removeItem(TOKEN_KEY)
     token = ''
     health = null
     planos = []
     usuarios = []
     vouchers = []
+  }
+
+  function expireSessionIfUnauthorized(error: unknown) {
+    if (!(error instanceof APIError) || error.status !== 401) return false
+    resetSession()
+    loginError = 'Sessao expirada. Entre novamente.'
     actionMessage = ''
+    return true
   }
 
   function messageFromError(error: unknown, fallback: string) {

@@ -19,14 +19,17 @@ import (
 
 func TestDesconectarUsuario_ChamaGatewayDeauthorize(t *testing.T) {
 	app := fiber.New()
+	repo := &fakeStore{}
 	router := &fakeGateway{}
 	admin.Register(app, admin.Dependencies{
-		Config:  config.Config{AdminUser: "admin", AdminPassword: "admin123"},
-		Store:   &fakeStore{},
+		Config:  testConfig(),
+		Store:   repo,
 		Gateway: router,
 	})
+	tokens := loginAdmin(t, app)
 
 	req := httptest.NewRequest("POST", "/admin/usuarios/AA:BB:CC:DD:EE:FF/desconectar", nil)
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
 	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
@@ -47,23 +50,26 @@ func TestDesconectarUsuario_ChamaGatewayDeauthorize(t *testing.T) {
 
 func TestListarVouchers_RetornaVouchersDoStore(t *testing.T) {
 	app := fiber.New()
-	admin.Register(app, admin.Dependencies{
-		Config: config.Config{AdminUser: "admin", AdminPassword: "admin123"},
-		Store: &fakeStore{
-			vouchers: []store.AdminVoucher{
-				{
-					ID:     1,
-					Codigo: "VIPA-1234",
-					Plano:  store.PlanoResumo{ID: 2, Nome: "Acesso 24 Horas"},
-					Tipo:   "single_use",
-					Ativo:  true,
-				},
+	repo := &fakeStore{
+		vouchers: []store.AdminVoucher{
+			{
+				ID:     1,
+				Codigo: "VIPA-1234",
+				Plano:  store.PlanoResumo{ID: 2, Nome: "Acesso 24 Horas"},
+				Tipo:   "single_use",
+				Ativo:  true,
 			},
 		},
+	}
+	admin.Register(app, admin.Dependencies{
+		Config:  testConfig(),
+		Store:   repo,
 		Gateway: &fakeGateway{},
 	})
+	tokens := loginAdmin(t, app)
 
 	req := httptest.NewRequest("GET", "/admin/vouchers", nil)
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
 	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
@@ -92,14 +98,16 @@ func TestGerarVouchers_RetornaCodigosCriados(t *testing.T) {
 		},
 	}
 	admin.Register(app, admin.Dependencies{
-		Config:  config.Config{AdminUser: "admin", AdminPassword: "admin123"},
+		Config:  testConfig(),
 		Store:   repo,
 		Gateway: &fakeGateway{},
 	})
+	tokens := loginAdmin(t, app)
 
 	body := strings.NewReader(`{"plano_id":2,"quantidade":2,"prefixo":"VIPA"}`)
 	req := httptest.NewRequest("POST", "/admin/vouchers/gerar", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
 	resp, err := app.Test(req, -1)
 	if err != nil {
 		t.Fatal(err)
@@ -122,10 +130,176 @@ func TestGerarVouchers_RetornaCodigosCriados(t *testing.T) {
 	}
 }
 
+func TestLogin_RetornaJWTAssinadoERefreshOpaco(t *testing.T) {
+	app := fiber.New()
+	repo := &fakeStore{}
+	admin.Register(app, admin.Dependencies{
+		Config:  testConfig(),
+		Store:   repo,
+		Gateway: &fakeGateway{},
+	})
+
+	tokens := loginAdmin(t, app)
+
+	if strings.Count(tokens.AccessToken, ".") != 2 {
+		t.Fatalf("access_token = %q, want JWT with 3 segments", tokens.AccessToken)
+	}
+	if tokens.RefreshToken == "" {
+		t.Fatal("refresh_token vazio")
+	}
+	if tokens.RefreshToken == tokens.AccessToken || strings.Count(tokens.RefreshToken, ".") == 2 || strings.HasSuffix(tokens.RefreshToken, ".refresh") {
+		t.Fatalf("refresh_token = %q, want opaque token", tokens.RefreshToken)
+	}
+	if tokens.TokenType != "Bearer" || tokens.ExpiresIn <= 0 {
+		t.Fatalf("resposta auth inesperada: %+v", tokens)
+	}
+	if len(repo.createdSessions) != 1 {
+		t.Fatalf("sessoes criadas = %d, want 1", len(repo.createdSessions))
+	}
+	session := repo.createdSessions[0]
+	if session.Usuario != "admin" {
+		t.Fatalf("usuario da sessao = %q", session.Usuario)
+	}
+	if session.RefreshTokenHash == "" || session.RefreshTokenHash == tokens.RefreshToken {
+		t.Fatalf("refresh token deve ser armazenado como hash, got %q", session.RefreshTokenHash)
+	}
+	if !session.ExpiresAt.After(time.Now().UTC()) {
+		t.Fatalf("expiracao da sessao = %s, want futuro", session.ExpiresAt)
+	}
+}
+
+func TestAdminRotasProtegidas_ExigemBearerToken(t *testing.T) {
+	app := fiber.New()
+	admin.Register(app, admin.Dependencies{
+		Config:  testConfig(),
+		Store:   &fakeStore{},
+		Gateway: &fakeGateway{},
+	})
+
+	req := httptest.NewRequest("GET", "/admin/vouchers", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 401 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s, want 401", resp.StatusCode, string(body))
+	}
+}
+
+func TestAuthMe_RetornaUsuarioDoJWT(t *testing.T) {
+	app := fiber.New()
+	admin.Register(app, admin.Dependencies{
+		Config:  testConfig(),
+		Store:   &fakeStore{},
+		Gateway: &fakeGateway{},
+	})
+	tokens := loginAdmin(t, app)
+
+	req := httptest.NewRequest("GET", "/admin/auth/me", nil)
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(body))
+	}
+	var got struct {
+		Usuario string `json:"usuario"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Usuario != "admin" {
+		t.Fatalf("usuario = %q", got.Usuario)
+	}
+}
+
+func TestRefresh_RotacionaRefreshToken(t *testing.T) {
+	app := fiber.New()
+	repo := &fakeStore{}
+	admin.Register(app, admin.Dependencies{
+		Config:  testConfig(),
+		Store:   repo,
+		Gateway: &fakeGateway{},
+	})
+	tokens := loginAdmin(t, app)
+
+	req := httptest.NewRequest("POST", "/admin/auth/refresh", strings.NewReader(`{"refresh_token":`+strconvQuote(tokens.RefreshToken)+`}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(body))
+	}
+	var refreshed authResponse
+	if err := json.NewDecoder(resp.Body).Decode(&refreshed); err != nil {
+		t.Fatal(err)
+	}
+	if refreshed.AccessToken == "" || strings.Count(refreshed.AccessToken, ".") != 2 {
+		t.Fatalf("access_token renovado invalido: %+v", refreshed)
+	}
+	if refreshed.RefreshToken == "" || refreshed.RefreshToken == tokens.RefreshToken {
+		t.Fatalf("refresh_token renovado = %q, antigo = %q", refreshed.RefreshToken, tokens.RefreshToken)
+	}
+	if len(repo.rotatedRefreshTokenHashes) != 1 {
+		t.Fatalf("rotacoes = %d, want 1", len(repo.rotatedRefreshTokenHashes))
+	}
+	if repo.rotatedRefreshTokenHashes[0] == tokens.RefreshToken {
+		t.Fatalf("refresh antigo foi enviado ao store sem hash")
+	}
+}
+
+func TestLogout_RevogaRefreshToken(t *testing.T) {
+	app := fiber.New()
+	repo := &fakeStore{}
+	admin.Register(app, admin.Dependencies{
+		Config:  testConfig(),
+		Store:   repo,
+		Gateway: &fakeGateway{},
+	})
+	tokens := loginAdmin(t, app)
+
+	req := httptest.NewRequest("POST", "/admin/auth/logout", strings.NewReader(`{"refresh_token":`+strconvQuote(tokens.RefreshToken)+`}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 204 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(body))
+	}
+	if len(repo.revokedRefreshTokenHashes) != 1 {
+		t.Fatalf("revogacoes = %d, want 1", len(repo.revokedRefreshTokenHashes))
+	}
+	if repo.revokedRefreshTokenHashes[0] == tokens.RefreshToken {
+		t.Fatalf("refresh token foi enviado ao store sem hash")
+	}
+}
+
 type fakeStore struct {
-	vouchers      []store.AdminVoucher
-	generated     store.GenerateVouchersResult
-	generateInput store.GenerateVouchersInput
+	vouchers                  []store.AdminVoucher
+	generated                 store.GenerateVouchersResult
+	generateInput             store.GenerateVouchersInput
+	createdSessions           []store.CreateAdminSessionInput
+	rotatedRefreshTokenHashes []string
+	revokedRefreshTokenHashes []string
+	sessions                  map[string]store.AdminSession
 }
 
 func (fakeStore) Settings(context.Context) (store.Settings, error)     { return store.Settings{}, nil }
@@ -155,6 +329,59 @@ func (f *fakeStore) GenerateVouchers(_ context.Context, input store.GenerateVouc
 	return f.generated, nil
 }
 
+func (f *fakeStore) CreateAdminSession(_ context.Context, input store.CreateAdminSessionInput) error {
+	f.createdSessions = append(f.createdSessions, input)
+	f.ensureSessions()
+	f.sessions[input.RefreshTokenHash] = store.AdminSession{
+		Usuario:          input.Usuario,
+		RefreshTokenHash: input.RefreshTokenHash,
+		IP:               input.IP,
+		UserAgent:        input.UserAgent,
+		ExpiresAt:        input.ExpiresAt,
+		CreatedAt:        time.Now().UTC(),
+	}
+	return nil
+}
+
+func (f *fakeStore) RotateAdminSession(_ context.Context, input store.RotateAdminSessionInput) (store.AdminSession, bool, error) {
+	f.rotatedRefreshTokenHashes = append(f.rotatedRefreshTokenHashes, input.CurrentRefreshTokenHash)
+	f.ensureSessions()
+	current, ok := f.sessions[input.CurrentRefreshTokenHash]
+	if !ok || current.Revoked || !current.ExpiresAt.After(input.Now) {
+		return store.AdminSession{}, false, nil
+	}
+	current.Revoked = true
+	f.sessions[input.CurrentRefreshTokenHash] = current
+	if err := f.CreateAdminSession(context.Background(), store.CreateAdminSessionInput{
+		Usuario:          current.Usuario,
+		RefreshTokenHash: input.NextRefreshTokenHash,
+		IP:               input.IP,
+		UserAgent:        input.UserAgent,
+		ExpiresAt:        input.ExpiresAt,
+	}); err != nil {
+		return store.AdminSession{}, false, err
+	}
+	return current, true, nil
+}
+
+func (f *fakeStore) RevokeAdminSession(_ context.Context, refreshTokenHash string) error {
+	f.revokedRefreshTokenHashes = append(f.revokedRefreshTokenHashes, refreshTokenHash)
+	f.ensureSessions()
+	current, ok := f.sessions[refreshTokenHash]
+	if !ok {
+		return nil
+	}
+	current.Revoked = true
+	f.sessions[refreshTokenHash] = current
+	return nil
+}
+
+func (f *fakeStore) ensureSessions() {
+	if f.sessions == nil {
+		f.sessions = map[string]store.AdminSession{}
+	}
+}
+
 type fakeGateway struct {
 	authorizations []gateway.Authorization
 	deauths        []string
@@ -172,4 +399,44 @@ func (f *fakeGateway) Deauthorize(_ context.Context, mac string) error {
 
 func (*fakeGateway) Ping(context.Context) (time.Duration, error) {
 	return 0, nil
+}
+
+type authResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+	TokenType    string `json:"token_type"`
+}
+
+func testConfig() config.Config {
+	return config.Config{
+		AdminUser:     "admin",
+		AdminPassword: "admin123",
+		JWTSecret:     "test-jwt-secret-com-mais-de-32-bytes",
+	}
+}
+
+func loginAdmin(t *testing.T, app *fiber.App) authResponse {
+	t.Helper()
+	req := httptest.NewRequest("POST", "/admin/auth/login", strings.NewReader(`{"usuario":"admin","senha":"admin123"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("login status = %d body=%s", resp.StatusCode, string(body))
+	}
+	var tokens authResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokens); err != nil {
+		t.Fatal(err)
+	}
+	return tokens
+}
+
+func strconvQuote(value string) string {
+	encoded, _ := json.Marshal(value)
+	return string(encoded)
 }

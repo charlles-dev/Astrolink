@@ -28,6 +28,12 @@ type Store interface {
 	Health(context.Context) Health
 }
 
+type AdminAuthStore interface {
+	CreateAdminSession(context.Context, CreateAdminSessionInput) error
+	RotateAdminSession(context.Context, RotateAdminSessionInput) (AdminSession, bool, error)
+	RevokeAdminSession(context.Context, string) error
+}
+
 type Settings struct {
 	HotspotNome        string `json:"hotspot_nome"`
 	HotspotLogoURL     string `json:"hotspot_logo_url"`
@@ -137,6 +143,34 @@ type GenerateVouchersResult struct {
 	LoteID     int            `json:"lote_id"`
 	Quantidade int            `json:"quantidade"`
 	Vouchers   []AdminVoucher `json:"vouchers"`
+}
+
+type AdminSession struct {
+	ID               string
+	Usuario          string
+	RefreshTokenHash string
+	IP               string
+	UserAgent        string
+	ExpiresAt        time.Time
+	Revoked          bool
+	CreatedAt        time.Time
+}
+
+type CreateAdminSessionInput struct {
+	Usuario          string
+	RefreshTokenHash string
+	IP               string
+	UserAgent        string
+	ExpiresAt        time.Time
+}
+
+type RotateAdminSessionInput struct {
+	CurrentRefreshTokenHash string
+	NextRefreshTokenHash    string
+	IP                      string
+	UserAgent               string
+	ExpiresAt               time.Time
+	Now                     time.Time
 }
 
 type Health struct {

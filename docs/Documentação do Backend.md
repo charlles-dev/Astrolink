@@ -42,6 +42,9 @@ node/
 ### Admin local inicial
 
 - `POST /admin/auth/login`
+- `POST /admin/auth/refresh`
+- `POST /admin/auth/logout`
+- `GET /admin/auth/me`
 - `GET /admin/sistema/saude`
 - `GET /admin/planos`
 - `GET /admin/usuarios`
@@ -59,6 +62,7 @@ HTTP_ADDR=:5000
 DATABASE_URL=postgres://astrolink:devpassword@localhost:5432/astrolink?sslmode=disable
 ADMIN_USUARIO=admin
 ADMIN_SENHA=admin123
+JWT_SECRET=dev-jwt-secret-nao-usar-em-producao-32chars
 NODE_NAME=dev-node-01
 OPENNDS_ENABLED=false
 OPENNDS_SSH_HOST=192.168.1.1
@@ -82,7 +86,7 @@ por SSH no roteador configurado.
 
 ## Proximas Pendencias do Backend
 
-- JWT real no admin.
+- Logs de auditoria no admin.
 - CRUD completo de planos.
 - Exportacao e impressao de vouchers.
 - Webhook real do Mercado Pago.

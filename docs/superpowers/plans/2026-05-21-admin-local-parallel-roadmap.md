@@ -18,6 +18,7 @@ Implemented:
 - Admin local login with temporary token.
 - Admin health, plans list, users list, vouchers list/generate, disconnect user.
 - Portal `/painel` UI for health, users, plans, and voucher generation.
+- Wave 0 split completed in commit `782d5bd`: admin backend handlers are separated by domain, and the admin dashboard is split into panel components under `portal/src/lib/components/admin/`.
 
 Out of scope for this roadmap:
 - Admin cloud.
@@ -72,12 +73,13 @@ First cut:
 - `POST /admin/auth/logout`
 - `GET /admin/auth/me`
 - Middleware protecting all `/admin/*` routes except login/refresh.
-- Audit records for login success/failure, logout, voucher generation, disconnect.
-- JWT should use HS256, `JWT_SECRET`, and claims for user, role, node, session id, issued-at, and expiration.
+- JWT should use HS256, `JWT_SECRET`, and claims for user, issued-at, and expiration.
 - Refresh tokens should be opaque random values, stored as hashes, and rotated on refresh.
 - Apply a local 5-failure login lockout window before adding heavier rate-limit infrastructure.
 
 Deferred:
+- Audit records for login success/failure, logout, voucher generation, disconnect.
+- Role, node, and session-id claims with active-session validation on every access token request.
 - TOTP 2FA.
 - IP allowlist.
 - Password change UI.
@@ -244,9 +246,9 @@ Deferred:
 
 Run these workers in parallel after Wave 0:
 
-- [ ] Worker A owns Lane A first cut.
+- [ ] Worker A owns Lane A first cut. Started as Auth P0 backend worker; audit logs are deferred to the next auth/audit pass.
 - [ ] Worker B owns Lane B first cut.
-- [ ] Worker C owns Lane C first cut.
+- [ ] Worker C owns Lane C first cut. Started with a frontend-only voucher form expansion because the backend already accepts the extra generation fields.
 - [ ] Worker D owns Lane D first cut.
 
 Conflict rule:

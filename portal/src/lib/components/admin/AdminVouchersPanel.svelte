@@ -9,17 +9,32 @@
   let voucherPlanoID = 0
   let voucherQuantidade = 1
   let voucherPrefixo = 'VIP'
+  let voucherTipo: 'single_use' | 'universal' = 'single_use'
+  let voucherUsosMaximos = 1
+  let voucherValidadeDias: number | '' = ''
 
   $: if (planos.length > 0 && !planos.some((plano) => plano.id === voucherPlanoID)) {
     voucherPlanoID = planos[0].id
   }
 
   function submitVoucherForm() {
-    onGenerateVouchers({
+    const body: GenerateAdminVouchersBody = {
       plano_id: Number(voucherPlanoID),
       quantidade: Number(voucherQuantidade),
+      tipo: voucherTipo,
       prefixo: voucherPrefixo.trim().toUpperCase()
-    })
+    }
+
+    const validadeDias = Number(voucherValidadeDias)
+    if (Number.isFinite(validadeDias) && validadeDias > 0) {
+      body.validade_dias = validadeDias
+    }
+
+    if (voucherTipo === 'universal') {
+      body.usos_maximos = Number(voucherUsosMaximos)
+    }
+
+    onGenerateVouchers(body)
   }
 </script>
 
@@ -38,7 +53,7 @@
       submitVoucherForm()
     }}
   >
-    <label>
+    <label class="field">
       Plano
       <select bind:value={voucherPlanoID} disabled={loading || planos.length === 0}>
         {#each planos as plano (plano.id)}
@@ -46,16 +61,45 @@
         {/each}
       </select>
     </label>
+
+    <fieldset class="type-control">
+      <legend>Tipo</legend>
+      <div class="type-options">
+        <label class:active={voucherTipo === 'single_use'}>
+          <input type="radio" bind:group={voucherTipo} value="single_use" disabled={loading} />
+          <span>Uso unico</span>
+        </label>
+        <label class:active={voucherTipo === 'universal'}>
+          <input type="radio" bind:group={voucherTipo} value="universal" disabled={loading} />
+          <span>Universal</span>
+        </label>
+      </div>
+    </fieldset>
+
     <div class="form-grid">
-      <label>
+      <label class="field">
         Prefixo
         <input bind:value={voucherPrefixo} maxlength="6" autocomplete="off" />
       </label>
-      <label>
+      <label class="field">
         Quantidade
         <input bind:value={voucherQuantidade} min="1" max="200" type="number" />
       </label>
     </div>
+
+    <div class="form-grid" class:single-field={voucherTipo !== 'universal'}>
+      <label class="field">
+        Validade (dias)
+        <input bind:value={voucherValidadeDias} min="1" type="number" placeholder="Opcional" />
+      </label>
+      {#if voucherTipo === 'universal'}
+        <label class="field">
+          Usos maximos
+          <input bind:value={voucherUsosMaximos} min="1" type="number" />
+        </label>
+      {/if}
+    </div>
+
     <button type="submit" class="ink-button wide" disabled={loading || planos.length === 0}>
       Gerar vouchers
     </button>
@@ -129,7 +173,8 @@
     margin-bottom: 14px;
   }
 
-  .voucher-form label {
+  .voucher-form .field,
+  .type-control legend {
     display: grid;
     gap: 6px;
     color: var(--color-ink);
@@ -137,7 +182,7 @@
     font-weight: 850;
   }
 
-  .voucher-form input,
+  .voucher-form input:not([type='radio']),
   .voucher-form select {
     width: 100%;
     min-height: 42px;
@@ -152,6 +197,50 @@
     display: grid;
     grid-template-columns: 1fr 116px;
     gap: 10px;
+  }
+
+  .form-grid.single-field {
+    grid-template-columns: 1fr;
+  }
+
+  .type-control {
+    display: grid;
+    gap: 6px;
+    border: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  .type-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .type-options label {
+    position: relative;
+    display: flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    background: #f8fafc;
+    color: var(--color-muted);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 900;
+  }
+
+  .type-options label.active {
+    border-color: #0f766e;
+    background: #ecfdf5;
+    color: #0f766e;
+  }
+
+  .type-options input {
+    position: absolute;
+    opacity: 0;
   }
 
   .ink-button {
@@ -229,5 +318,12 @@
   .empty-state p {
     margin-top: 6px;
     font-size: 0.88rem;
+  }
+
+  @media (max-width: 420px) {
+    .form-grid,
+    .type-options {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

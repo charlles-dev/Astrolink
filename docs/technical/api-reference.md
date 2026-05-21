@@ -192,6 +192,9 @@ Erros comuns:
 
 ## Admin Local
 
+Todas as rotas abaixo exigem `Authorization: Bearer <access_token>`, exceto
+`POST /admin/auth/login` e `POST /admin/auth/refresh`.
+
 ### `POST /admin/auth/login`
 
 Body:
@@ -211,6 +214,52 @@ Resposta:
   "refresh_token": "...",
   "expires_in": 28800,
   "token_type": "Bearer"
+}
+```
+
+O access token e um JWT HS256 com validade de 8 horas. O refresh token e opaco,
+armazenado como hash, com validade de 30 dias.
+
+### `POST /admin/auth/refresh`
+
+Body:
+
+```json
+{
+  "refresh_token": "..."
+}
+```
+
+Resposta:
+
+```json
+{
+  "access_token": "...",
+  "refresh_token": "...",
+  "expires_in": 28800,
+  "token_type": "Bearer"
+}
+```
+
+### `POST /admin/auth/logout`
+
+Body:
+
+```json
+{
+  "refresh_token": "..."
+}
+```
+
+Resposta: `204 No Content`.
+
+### `GET /admin/auth/me`
+
+Resposta:
+
+```json
+{
+  "usuario": "admin"
 }
 ```
 
@@ -261,6 +310,7 @@ Body:
   "plano_id": 2,
   "quantidade": 10,
   "tipo": "single_use",
+  "validade_dias": 30,
   "prefixo": "VIP"
 }
 ```
@@ -300,7 +350,7 @@ Resposta:
 
 ## Backlog da API
 
-- JWT real e middleware de autenticacao.
+- Logs de auditoria para acoes admin.
 - CRUD de planos.
 - Exportacao e impressao de vouchers.
 - Webhook real do Mercado Pago.

@@ -20,6 +20,7 @@ type Store struct {
 	vouchers      map[string]vouchers.Voucher
 	usuarios      map[string]store.Usuario
 	pix           map[string]store.PixTransaction
+	adminSessions map[string]store.AdminSession
 	nextVoucherID int
 	nextLoteID    int
 }
@@ -44,6 +45,7 @@ func NewStore() *Store {
 		},
 		usuarios:      map[string]store.Usuario{},
 		pix:           map[string]store.PixTransaction{},
+		adminSessions: map[string]store.AdminSession{},
 		nextVoucherID: 3,
 		nextLoteID:    1,
 	}
@@ -261,8 +263,63 @@ func (s *Store) GenerateVouchers(_ context.Context, input store.GenerateVouchers
 	}, nil
 }
 
+func (s *Store) CreateAdminSession(_ context.Context, input store.CreateAdminSessionInput) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureAdminSessions()
+	s.adminSessions[input.RefreshTokenHash] = store.AdminSession{
+		Usuario:          input.Usuario,
+		RefreshTokenHash: input.RefreshTokenHash,
+		IP:               input.IP,
+		UserAgent:        input.UserAgent,
+		ExpiresAt:        input.ExpiresAt,
+		CreatedAt:        time.Now().UTC(),
+	}
+	return nil
+}
+
+func (s *Store) RotateAdminSession(_ context.Context, input store.RotateAdminSessionInput) (store.AdminSession, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureAdminSessions()
+	current, ok := s.adminSessions[input.CurrentRefreshTokenHash]
+	if !ok || current.Revoked || !current.ExpiresAt.After(input.Now) {
+		return store.AdminSession{}, false, nil
+	}
+	current.Revoked = true
+	s.adminSessions[input.CurrentRefreshTokenHash] = current
+	s.adminSessions[input.NextRefreshTokenHash] = store.AdminSession{
+		Usuario:          current.Usuario,
+		RefreshTokenHash: input.NextRefreshTokenHash,
+		IP:               input.IP,
+		UserAgent:        input.UserAgent,
+		ExpiresAt:        input.ExpiresAt,
+		CreatedAt:        time.Now().UTC(),
+	}
+	return current, true, nil
+}
+
+func (s *Store) RevokeAdminSession(_ context.Context, refreshTokenHash string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureAdminSessions()
+	current, ok := s.adminSessions[refreshTokenHash]
+	if !ok {
+		return nil
+	}
+	current.Revoked = true
+	s.adminSessions[refreshTokenHash] = current
+	return nil
+}
+
 func (s *Store) Health(context.Context) store.Health {
 	return store.Health{DatabaseStatus: "memory"}
+}
+
+func (s *Store) ensureAdminSessions() {
+	if s.adminSessions == nil {
+		s.adminSessions = map[string]store.AdminSession{}
+	}
 }
 
 func (s *Store) findPlano(id int) (planos.Plano, error) {
