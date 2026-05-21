@@ -32,6 +32,8 @@ type Voucher struct {
 	ValidadeEm  *time.Time
 	Ativo       bool
 	Prefixo     string
+	LoteID      *int
+	CreatedAt   time.Time
 }
 
 func (v Voucher) Validar(now time.Time) error {

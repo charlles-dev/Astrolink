@@ -182,9 +182,22 @@ export interface AdminVoucher {
   created_at?: string
 }
 
+export type AdminVoucherStatusFilter = 'ativo' | 'inativo' | 'todos'
+
+export interface AdminVoucherFilters {
+  status?: AdminVoucherStatusFilter
+  plano_id?: number
+  codigo?: string
+  lote_id?: number
+}
+
 export interface AdminVouchersResponse {
   total: number
   vouchers: AdminVoucher[]
+}
+
+export interface AdminVoucherResponse {
+  voucher: AdminVoucher
 }
 
 export interface GenerateAdminVouchersBody {

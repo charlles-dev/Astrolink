@@ -31,7 +31,8 @@ func NewStore() *Store {
 	durationDay := 1440
 	durationWeek := 10080
 	maxUses := 25
-	expires := time.Now().Add(30 * 24 * time.Hour)
+	now := time.Now().UTC()
+	expires := now.Add(30 * 24 * time.Hour)
 
 	return &Store{
 		settings: store.DefaultSettings(),
@@ -41,8 +42,8 @@ func NewStore() *Store {
 			planos.New(3, "Pacote Semanal", "Sete dias para familia ou equipe.", 50, &durationWeek, false, 3),
 		},
 		vouchers: map[string]vouchers.Voucher{
-			"TEST-1234": {ID: 1, Codigo: "TEST-1234", PlanoID: 2, Tipo: vouchers.TipoSingleUse, Ativo: true, ValidadeEm: &expires},
-			"UNIV-0000": {ID: 2, Codigo: "UNIV-0000", PlanoID: 1, Tipo: vouchers.TipoUniversal, UsosMaximos: &maxUses, Ativo: true},
+			"TEST-1234": {ID: 1, Codigo: "TEST-1234", PlanoID: 2, Tipo: vouchers.TipoSingleUse, Ativo: true, ValidadeEm: &expires, CreatedAt: now.Add(-2 * time.Minute)},
+			"UNIV-0000": {ID: 2, Codigo: "UNIV-0000", PlanoID: 1, Tipo: vouchers.TipoUniversal, UsosMaximos: &maxUses, Ativo: true, CreatedAt: now.Add(-time.Minute)},
 		},
 		usuarios:      map[string]store.Usuario{},
 		pix:           map[string]store.PixTransaction{},
@@ -237,21 +238,52 @@ func (s *Store) RedeemVoucher(_ context.Context, input store.RedeemVoucherInput)
 	}, nil
 }
 
-func (s *Store) AdminVouchers(_ context.Context) ([]store.AdminVoucher, error) {
+func (s *Store) AdminVouchers(ctx context.Context) ([]store.AdminVoucher, error) {
+	return s.AdminVouchersFiltered(ctx, store.AdminVoucherFilter{Limit: 200})
+}
+
+func (s *Store) AdminVouchersFiltered(_ context.Context, filter store.AdminVoucherFilter) ([]store.AdminVoucher, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	result := make([]store.AdminVoucher, 0, len(s.vouchers))
 	for _, voucher := range s.vouchers {
+		if !voucherMatchesFilter(voucher, filter) {
+			continue
+		}
 		plano, err := s.findPlano(voucher.PlanoID)
 		if err != nil {
 			continue
 		}
-		result = append(result, adminVoucherFromDomain(voucher, plano, nil))
+		result = append(result, adminVoucherFromDomain(voucher, plano))
 	}
 	sort.Slice(result, func(i, j int) bool {
+		if !result[i].CreatedAt.Equal(result[j].CreatedAt) {
+			return result[i].CreatedAt.After(result[j].CreatedAt)
+		}
 		return result[i].ID > result[j].ID
 	})
+	if filter.Limit > 0 && len(result) > filter.Limit {
+		result = result[:filter.Limit]
+	}
 	return result, nil
+}
+
+func (s *Store) DeactivateVoucher(_ context.Context, id int) (store.AdminVoucher, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for code, voucher := range s.vouchers {
+		if voucher.ID != id {
+			continue
+		}
+		voucher.Ativo = false
+		s.vouchers[code] = voucher
+		plano, err := s.findPlano(voucher.PlanoID)
+		if err != nil {
+			return store.AdminVoucher{}, err
+		}
+		return adminVoucherFromDomain(voucher, plano), nil
+	}
+	return store.AdminVoucher{}, store.ErrVoucherNotFound
 }
 
 func (s *Store) GenerateVouchers(_ context.Context, input store.GenerateVouchersInput) (store.GenerateVouchersResult, error) {
@@ -290,10 +322,12 @@ func (s *Store) GenerateVouchers(_ context.Context, input store.GenerateVouchers
 			ValidadeEm:  validadeEm,
 			Ativo:       true,
 			Prefixo:     strings.ToUpper(strings.TrimSpace(input.Prefixo)),
+			LoteID:      &loteID,
+			CreatedAt:   time.Now().UTC(),
 		}
 		s.nextVoucherID++
 		s.vouchers[code] = voucher
-		created = append(created, adminVoucherFromDomain(voucher, plano, &loteID))
+		created = append(created, adminVoucherFromDomain(voucher, plano))
 	}
 	return store.GenerateVouchersResult{
 		LoteID:     loteID,
@@ -412,7 +446,32 @@ func normalizeMAC(mac string) string {
 	return strings.ToUpper(mac)
 }
 
-func adminVoucherFromDomain(voucher vouchers.Voucher, plano planos.Plano, loteID *int) store.AdminVoucher {
+func voucherMatchesFilter(voucher vouchers.Voucher, filter store.AdminVoucherFilter) bool {
+	switch strings.ToLower(strings.TrimSpace(filter.Status)) {
+	case "ativo":
+		if !voucher.Ativo {
+			return false
+		}
+	case "inativo":
+		if voucher.Ativo {
+			return false
+		}
+	}
+	if filter.PlanoID != nil && voucher.PlanoID != *filter.PlanoID {
+		return false
+	}
+	if filter.Codigo != "" && !strings.Contains(strings.ToLower(voucher.Codigo), strings.ToLower(strings.TrimSpace(filter.Codigo))) {
+		return false
+	}
+	if filter.LoteID != nil {
+		if voucher.LoteID == nil || *voucher.LoteID != *filter.LoteID {
+			return false
+		}
+	}
+	return true
+}
+
+func adminVoucherFromDomain(voucher vouchers.Voucher, plano planos.Plano) store.AdminVoucher {
 	return store.AdminVoucher{
 		ID:          voucher.ID,
 		Codigo:      voucher.Codigo,
@@ -423,6 +482,7 @@ func adminVoucherFromDomain(voucher vouchers.Voucher, plano planos.Plano, loteID
 		ValidadeEm:  voucher.ValidadeEm,
 		Ativo:       voucher.Ativo,
 		Prefixo:     voucher.Prefixo,
-		LoteID:      loteID,
+		LoteID:      voucher.LoteID,
+		CreatedAt:   voucher.CreatedAt,
 	}
 }

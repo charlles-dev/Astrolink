@@ -8,6 +8,7 @@
     AdminPlanBody,
     AdminUser,
     AdminVoucher,
+    AdminVoucherFilters,
     GenerateAdminVouchersBody,
     Plano
   } from '../types'
@@ -23,6 +24,9 @@
   export let onSavePlan: (input: AdminPlanBody, id?: number) => Promise<void> | void = () => {}
   export let onTogglePlanStatus: (id: number, ativo: boolean) => Promise<void> | void = () => {}
   export let onGenerateVouchers: (input: GenerateAdminVouchersBody) => void = () => {}
+  export let onApplyVoucherFilters: (filters: AdminVoucherFilters) => void = () => {}
+  export let onDeactivateVoucher: (id: number) => void = () => {}
+  export let onExportVouchers: (filters: AdminVoucherFilters) => void = () => {}
   export let onLogout: () => void = () => {}
 </script>
 
@@ -51,7 +55,15 @@
 
     <aside class="side-stack">
       <AdminPlansPanel {planos} {loading} {onSavePlan} {onTogglePlanStatus} />
-      <AdminVouchersPanel {planos} {vouchers} {loading} {onGenerateVouchers} />
+      <AdminVouchersPanel
+        {planos}
+        {vouchers}
+        {loading}
+        {onGenerateVouchers}
+        {onApplyVoucherFilters}
+        {onDeactivateVoucher}
+        {onExportVouchers}
+      />
     </aside>
   </div>
 </section>

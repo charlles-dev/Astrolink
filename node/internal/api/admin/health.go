@@ -5,6 +5,7 @@ import "github.com/gofiber/fiber/v2"
 func healthHandler(deps Dependencies) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		health := deps.Store.Health(c.UserContext())
+		router := routerStatus(c.UserContext(), deps.Gateway)
 		return c.JSON(fiber.Map{
 			"status":          "healthy",
 			"versao":          "0.1.0",
@@ -14,7 +15,7 @@ func healthHandler(deps Dependencies) fiber.Handler {
 				"redis":       fiber.Map{"status": "mock"},
 				"rabbitmq":    fiber.Map{"status": "mock"},
 				"mercadopago": fiber.Map{"status": "mock"},
-				"roteadores":  fiber.Map{"total": 1, "online": 1, "offline": 0},
+				"roteadores":  routerHealthPayload(router),
 			},
 		})
 	}

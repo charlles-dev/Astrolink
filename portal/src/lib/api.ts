@@ -5,6 +5,8 @@ import type {
   AdminPlanResponse,
   AdminLoginBody,
   AdminLoginResponse,
+  AdminVoucherFilters,
+  AdminVoucherResponse,
   AdminVouchersResponse,
   AdminUsersResponse,
   GenerateAdminVouchersBody,
@@ -36,6 +38,16 @@ export class APIError extends Error {
 }
 
 export function createApiClient(baseURL = '') {
+  function buildQuery(filters?: AdminVoucherFilters) {
+    const params = new URLSearchParams()
+    if (filters?.status) params.set('status', filters.status)
+    if (filters?.plano_id) params.set('plano_id', String(filters.plano_id))
+    if (filters?.codigo?.trim()) params.set('codigo', filters.codigo.trim())
+    if (filters?.lote_id) params.set('lote_id', String(filters.lote_id))
+    const query = params.toString()
+    return query ? `?${query}` : ''
+  }
+
   async function request<T>(
     method: string,
     path: string,
@@ -65,6 +77,26 @@ export function createApiClient(baseURL = '') {
     }
 
     return data as T
+  }
+
+  async function requestBlob(path: string, token: string): Promise<Blob> {
+    const response = await fetch(`${baseURL}${path}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` }
+    })
+
+    if (!response.ok) {
+      const contentType = response.headers.get('content-type') ?? ''
+      const data = contentType.includes('application/json') ? await response.json() : null
+      const payload = (data ?? {}) as ErrorPayload
+      throw new APIError(
+        response.status,
+        payload.erro ?? 'erro_interno',
+        payload.mensagem ?? 'Nao foi possivel completar a requisicao'
+      )
+    }
+
+    return response.blob()
   }
 
   return {
@@ -98,8 +130,12 @@ export function createApiClient(baseURL = '') {
         {},
         token
       ),
-    getAdminVouchers: (token: string) =>
-      request<AdminVouchersResponse>('GET', '/admin/vouchers', undefined, token),
+    getAdminVouchers: (token: string, filters?: AdminVoucherFilters) =>
+      request<AdminVouchersResponse>('GET', `/admin/vouchers${buildQuery(filters)}`, undefined, token),
+    deactivateAdminVoucher: (token: string, id: number) =>
+      request<AdminVoucherResponse>('PATCH', `/admin/vouchers/${id}/desativar`, undefined, token),
+    exportAdminVouchers: (token: string, filters?: AdminVoucherFilters) =>
+      requestBlob(`/admin/vouchers/export.csv${buildQuery(filters)}`, token),
     generateAdminVouchers: (token: string, body: GenerateAdminVouchersBody) =>
       request<GenerateAdminVouchersResponse>('POST', '/admin/vouchers/gerar', body, token)
   }

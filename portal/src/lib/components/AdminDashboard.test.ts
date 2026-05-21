@@ -198,4 +198,117 @@ describe('AdminDashboard', () => {
       prefixo: 'PUB'
     })
   })
+
+  it('applies voucher filters', async () => {
+    const onApplyVoucherFilters = vi.fn()
+
+    render(AdminDashboard, {
+      props: {
+        health: null,
+        planos: [
+          {
+            id: 2,
+            nome: 'Acesso 24 Horas',
+            preco: '15.00',
+            duracao_minutos: 1440,
+            duracao_formatada: '24 horas',
+            dados_mb: null,
+            velocidade_down: 10,
+            velocidade_up: 5,
+            recomendado: true,
+            ativo: true,
+            visivel_portal: true,
+            ordem: 1
+          }
+        ],
+        vouchers: [],
+        usuarios: [],
+        loading: false,
+        actionMessage: '',
+        onRefresh: vi.fn(),
+        onDisconnect: vi.fn(),
+        onGenerateVouchers: vi.fn(),
+        onApplyVoucherFilters,
+        onLogout: vi.fn()
+      }
+    })
+
+    await fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'inativo' } })
+    await fireEvent.change(screen.getByLabelText('Plano do filtro'), { target: { value: '2' } })
+    await fireEvent.input(screen.getByLabelText('Codigo'), { target: { value: 'vipa' } })
+    await fireEvent.input(screen.getByLabelText('Lote'), { target: { value: '12' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
+
+    expect(onApplyVoucherFilters).toHaveBeenCalledWith({
+      status: 'inativo',
+      plano_id: 2,
+      codigo: 'VIPA',
+      lote_id: 12
+    })
+  })
+
+  it('confirms and requests voucher deactivation from the row action', async () => {
+    const onDeactivateVoucher = vi.fn()
+
+    render(AdminDashboard, {
+      props: {
+        health: null,
+        planos: [],
+        vouchers: [
+          {
+            id: 7,
+            codigo: 'VIPA-7777',
+            plano: { id: 1, nome: 'Acesso 24 Horas' },
+            tipo: 'single_use',
+            usos_atuais: 0,
+            ativo: true
+          }
+        ],
+        usuarios: [],
+        loading: false,
+        actionMessage: '',
+        onRefresh: vi.fn(),
+        onDisconnect: vi.fn(),
+        onGenerateVouchers: vi.fn(),
+        onDeactivateVoucher,
+        onLogout: vi.fn()
+      }
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Desativar VIPA-7777' }))
+    expect(onDeactivateVoucher).not.toHaveBeenCalled()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Confirmar desativacao VIPA-7777' }))
+
+    expect(onDeactivateVoucher).toHaveBeenCalledWith(7)
+  })
+
+  it('requests voucher CSV export with filters', async () => {
+    const onExportVouchers = vi.fn()
+
+    render(AdminDashboard, {
+      props: {
+        health: null,
+        planos: [],
+        vouchers: [],
+        usuarios: [],
+        loading: false,
+        actionMessage: '',
+        onRefresh: vi.fn(),
+        onDisconnect: vi.fn(),
+        onGenerateVouchers: vi.fn(),
+        onExportVouchers,
+        onLogout: vi.fn()
+      }
+    })
+
+    await fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'ativo' } })
+    await fireEvent.input(screen.getByLabelText('Codigo'), { target: { value: 'vip' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Exportar CSV' }))
+
+    expect(onExportVouchers).toHaveBeenCalledWith({
+      status: 'ativo',
+      codigo: 'VIP'
+    })
+  })
 })

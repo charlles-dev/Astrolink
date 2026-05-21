@@ -68,12 +68,37 @@ func (c *OpenNDSController) Ping(ctx context.Context) (time.Duration, error) {
 	return time.Since(start), err
 }
 
+func (c *OpenNDSController) Diagnostic(ctx context.Context) (RouterDiagnostic, error) {
+	statusOutput, err := c.runOutputWithRetry(ctx, "ndsctl status")
+	if err != nil {
+		return RouterDiagnostic{}, err
+	}
+	clientsOutput, err := c.runOutputWithRetry(ctx, "ndsctl clients")
+	if err != nil {
+		return RouterDiagnostic{}, err
+	}
+	boardOutput, err := c.runOutputWithRetry(ctx, "ubus call system board")
+	if err != nil {
+		return RouterDiagnostic{}, err
+	}
+	logsOutput, err := c.runOutputWithRetry(ctx, "logread -e opennds -n 50")
+	if err != nil {
+		return RouterDiagnostic{}, err
+	}
+	return BuildRouterDiagnostic(statusOutput, clientsOutput, boardOutput, logsOutput), nil
+}
+
 func (c *OpenNDSController) runWithRetry(ctx context.Context, command string) error {
+	_, err := c.runOutputWithRetry(ctx, command)
+	return err
+}
+
+func (c *OpenNDSController) runOutputWithRetry(ctx context.Context, command string) (string, error) {
 	var lastErr error
 	for attempt := 0; attempt < c.opts.Retries; attempt++ {
-		_, err := c.runner.Run(ctx, command)
+		output, err := c.runner.Run(ctx, command)
 		if err == nil {
-			return nil
+			return output, nil
 		}
 		lastErr = err
 		if attempt == c.opts.Retries-1 {
@@ -83,11 +108,11 @@ func (c *OpenNDSController) runWithRetry(ctx context.Context, command string) er
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return ctx.Err()
+			return "", ctx.Err()
 		case <-timer.C:
 		}
 	}
-	return fmt.Errorf("executar %q: %w", command, lastErr)
+	return "", fmt.Errorf("executar %q: %w", command, lastErr)
 }
 
 func normalizeMAC(mac string) (string, error) {

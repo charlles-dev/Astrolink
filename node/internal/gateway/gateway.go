@@ -18,6 +18,10 @@ type Controller interface {
 	Ping(context.Context) (time.Duration, error)
 }
 
+type DiagnosticController interface {
+	Diagnostic(context.Context) (RouterDiagnostic, error)
+}
+
 type CommandRunner interface {
 	Run(context.Context, string) (string, error)
 }

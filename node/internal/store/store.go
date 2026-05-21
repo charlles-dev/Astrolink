@@ -28,6 +28,11 @@ type Store interface {
 	Health(context.Context) Health
 }
 
+type AdminVoucherOperationalStore interface {
+	AdminVouchersFiltered(context.Context, AdminVoucherFilter) ([]AdminVoucher, error)
+	DeactivateVoucher(context.Context, int) (AdminVoucher, error)
+}
+
 type AdminAuthStore interface {
 	CreateAdminSession(context.Context, CreateAdminSessionInput) error
 	RotateAdminSession(context.Context, RotateAdminSessionInput) (AdminSession, bool, error)
@@ -134,6 +139,14 @@ type AdminVoucher struct {
 	Prefixo     string      `json:"prefixo,omitempty"`
 	LoteID      *int        `json:"lote_id,omitempty"`
 	CreatedAt   time.Time   `json:"created_at,omitempty"`
+}
+
+type AdminVoucherFilter struct {
+	Status  string
+	PlanoID *int
+	Codigo  string
+	LoteID  *int
+	Limit   int
 }
 
 type GenerateVouchersInput struct {

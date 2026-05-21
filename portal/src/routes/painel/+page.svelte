@@ -9,6 +9,7 @@
     AdminLoginResponse,
     AdminUser,
     AdminVoucher,
+    AdminVoucherFilters,
     GenerateAdminVouchersBody,
     Plano
   } from '$lib/types'
@@ -22,6 +23,7 @@
   let planos: Plano[] = []
   let usuarios: AdminUser[] = []
   let vouchers: AdminVoucher[] = []
+  let voucherFilters: AdminVoucherFilters = { status: 'ativo' }
   let loading = false
   let loginLoading = false
   let loginError = ''
@@ -59,7 +61,7 @@
         api.getAdminHealth(token),
         api.getAdminPlanos(token),
         api.getAdminUsuarios(token),
-        api.getAdminVouchers(token)
+        api.getAdminVouchers(token, voucherFilters)
       ])
       health = nextHealth
       planos = nextPlanos.planos
@@ -95,7 +97,7 @@
     actionMessage = ''
     try {
       const result = await api.generateAdminVouchers(token, input)
-      vouchers = [...result.vouchers, ...vouchers]
+      await reloadVouchers()
       actionMessage =
         result.quantidade === 1
           ? '1 voucher gerado'
@@ -106,6 +108,59 @@
     } finally {
       loading = false
     }
+  }
+
+  async function applyVoucherFilters(filters: AdminVoucherFilters) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    voucherFilters = filters
+    try {
+      await reloadVouchers()
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel carregar vouchers')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function deactivateVoucher(id: number) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      await api.deactivateAdminVoucher(token, id)
+      await reloadVouchers()
+      actionMessage = 'Voucher desativado'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel desativar o voucher')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function exportVouchers(filters: AdminVoucherFilters) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    voucherFilters = filters
+    try {
+      const csv = await api.exportAdminVouchers(token, filters)
+      downloadBlob(csv, 'astrolink-vouchers.csv')
+      actionMessage = 'Exportacao iniciada'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel exportar vouchers')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function reloadVouchers() {
+    const result = await api.getAdminVouchers(token, voucherFilters)
+    vouchers = result.vouchers
   }
 
   async function savePlan(input: AdminPlanBody, id?: number) {
@@ -162,6 +217,18 @@
     planos = []
     usuarios = []
     vouchers = []
+    voucherFilters = { status: 'ativo' }
+  }
+
+  function downloadBlob(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
   }
 
   function expireSessionIfUnauthorized(error: unknown) {
@@ -192,6 +259,9 @@
     onSavePlan={savePlan}
     onTogglePlanStatus={togglePlanStatus}
     onGenerateVouchers={generateVouchers}
+    onApplyVoucherFilters={applyVoucherFilters}
+    onDeactivateVoucher={deactivateVoucher}
+    onExportVouchers={exportVouchers}
     onLogout={logout}
   />
 {:else}

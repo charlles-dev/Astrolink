@@ -249,8 +249,8 @@ Run these workers in parallel after Wave 0:
 
 - [x] Worker A owns Lane A first cut. JWT, refresh, logout, me, and middleware are done; audit/session-bound token hardening remains deferred.
 - [x] Worker B owns Lane B first cut. Backend and frontend plan CRUD are done in Wave 1B.
-- [x] Worker C owns Lane C generation-form foundation. Advanced generation fields are done; filter/export/deactivate operations remain.
-- [ ] Worker D owns Lane D first cut. Parser/diagnostic foundation is done in Wave 1B; admin HTTP wiring remains.
+- [x] Worker C owns Lane C first cut. Advanced generation fields, filters, CSV export, and deactivate operation are done.
+- [x] Worker D owns Lane D first cut. Parser/diagnostic foundation and admin HTTP wiring are done.
 
 Conflict rule:
 - Only one worker may edit `store.Store` at a time. If workers need new store methods, each worker should prepare a patch in its lane and the coordinator integrates the shared interface changes.
@@ -284,6 +284,22 @@ Wave 1B verification:
 - `npm test`, `npm run check`, and `npm run build` in `portal`
 - `git diff --check`
 - Browser verification on `http://127.0.0.1:5173/painel`: login, plan form visible, create plan success message, and plan count update.
+
+### Wave 1C: Voucher Operations and Router HTTP
+
+Run after commit `0de8689`:
+
+- [x] Agent Vouchers Backend owns operational voucher filters, CSV export, and deactivate endpoint.
+- [x] Agent Vouchers Frontend owns filters, export button, deactivate flow, and route orchestration for voucher operations.
+- [x] Agent Router Backend owns health router status, router list, diagnostic endpoint, and OpenNDS diagnostic command wiring.
+- [x] Coordinator registers the shared routes in `handlers.go`, verifies API contracts, and runs full backend/frontend/browser checks.
+
+Wave 1C verification:
+- `go test ./...` in `node`
+- `npm test`, `npm run check`, and `npm run build` in `portal`
+- `git diff --check`
+- Browser DOM verification on `http://127.0.0.1:5173/painel`: login, voucher filters, CSV export button, and deactivate controls visible.
+- Local API verification: admin login, filtered voucher query, voucher deactivation, CSV export, router health, router list, and router diagnostic.
 
 Active agents:
 - Backend plans: Dirac (`019e4b57-4344-7572-904b-474283a76b6a`)

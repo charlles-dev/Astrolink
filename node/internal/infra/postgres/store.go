@@ -356,15 +356,12 @@ func (s *Store) RedeemVoucher(ctx context.Context, input store.RedeemVoucherInpu
 }
 
 func (s *Store) AdminVouchers(ctx context.Context) ([]store.AdminVoucher, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT
-			v.id, v.codigo, v.tipo, v.usos_maximos, v.usos_atuais, v.validade_em,
-			v.ativo, COALESCE(v.prefixo, ''), v.lote_id, v.created_at,
-			p.id, p.nome
-		FROM vouchers v
-		JOIN planos p ON p.id = v.plano_id
-		ORDER BY v.created_at DESC, v.id DESC
-		LIMIT 200`)
+	return s.AdminVouchersFiltered(ctx, store.AdminVoucherFilter{Limit: 200})
+}
+
+func (s *Store) AdminVouchersFiltered(ctx context.Context, filter store.AdminVoucherFilter) ([]store.AdminVoucher, error) {
+	query, args := adminVouchersQuery(filter)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("buscar vouchers: %w", err)
 	}
@@ -382,6 +379,65 @@ func (s *Store) AdminVouchers(ctx context.Context) ([]store.AdminVoucher, error)
 		return nil, fmt.Errorf("iterar vouchers: %w", err)
 	}
 	return result, nil
+}
+
+func (s *Store) DeactivateVoucher(ctx context.Context, id int) (store.AdminVoucher, error) {
+	row := s.db.QueryRowContext(ctx, `
+		UPDATE vouchers v
+		SET ativo = FALSE
+		FROM planos p
+		WHERE v.id = $1 AND p.id = v.plano_id
+		RETURNING
+			v.id, v.codigo, v.tipo, v.usos_maximos, v.usos_atuais, v.validade_em,
+			v.ativo, COALESCE(v.prefixo, ''), v.lote_id, v.created_at,
+			p.id, p.nome`, id)
+	voucher, err := scanAdminVoucher(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.AdminVoucher{}, store.ErrVoucherNotFound
+	}
+	if err != nil {
+		return store.AdminVoucher{}, fmt.Errorf("desativar voucher: %w", err)
+	}
+	return voucher, nil
+}
+
+func adminVouchersQuery(filter store.AdminVoucherFilter) (string, []any) {
+	query := `
+		SELECT
+			v.id, v.codigo, v.tipo, v.usos_maximos, v.usos_atuais, v.validade_em,
+			v.ativo, COALESCE(v.prefixo, ''), v.lote_id, v.created_at,
+			p.id, p.nome
+		FROM vouchers v
+		JOIN planos p ON p.id = v.plano_id`
+	clauses := []string{}
+	args := []any{}
+	addArg := func(value any) string {
+		args = append(args, value)
+		return fmt.Sprintf("$%d", len(args))
+	}
+	switch strings.ToLower(strings.TrimSpace(filter.Status)) {
+	case "ativo":
+		clauses = append(clauses, "v.ativo = TRUE")
+	case "inativo":
+		clauses = append(clauses, "v.ativo = FALSE")
+	}
+	if filter.PlanoID != nil {
+		clauses = append(clauses, "v.plano_id = "+addArg(*filter.PlanoID))
+	}
+	if strings.TrimSpace(filter.Codigo) != "" {
+		clauses = append(clauses, "v.codigo ILIKE "+addArg("%"+strings.TrimSpace(filter.Codigo)+"%"))
+	}
+	if filter.LoteID != nil {
+		clauses = append(clauses, "v.lote_id = "+addArg(*filter.LoteID))
+	}
+	if len(clauses) > 0 {
+		query += "\n\t\tWHERE " + strings.Join(clauses, " AND ")
+	}
+	query += "\n\t\tORDER BY v.created_at DESC, v.id DESC"
+	if filter.Limit > 0 {
+		query += "\n\t\tLIMIT " + addArg(filter.Limit)
+	}
+	return query, args
 }
 
 func (s *Store) GenerateVouchers(ctx context.Context, input store.GenerateVouchersInput) (store.GenerateVouchersResult, error) {

@@ -135,6 +135,86 @@ describe('createApiClient', () => {
     )
   })
 
+  it('loads admin vouchers with filters', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ total: 0, vouchers: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+    )
+
+    const api = createApiClient('')
+    await api.getAdminVouchers('token-123', {
+      status: 'inativo',
+      plano_id: 2,
+      codigo: 'vip',
+      lote_id: 9
+    })
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/admin/vouchers?status=inativo&plano_id=2&codigo=vip&lote_id=9',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+  })
+
+  it('deactivates an admin voucher', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ voucher: { id: 7, codigo: 'VIPA-7777', ativo: false } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+    )
+
+    const api = createApiClient('')
+    const result = await api.deactivateAdminVoucher('token-123', 7)
+
+    expect(result.voucher.ativo).toBe(false)
+    expect(fetch).toHaveBeenCalledWith(
+      '/admin/vouchers/7/desativar',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+  })
+
+  it('exports admin vouchers as CSV with filters', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response('codigo,status\nVIPA-1234,ativo\n', {
+          status: 200,
+          headers: { 'content-type': 'text/csv' }
+        })
+      )
+    )
+
+    const api = createApiClient('')
+    const result = await api.exportAdminVouchers('token-123', {
+      status: 'ativo',
+      plano_id: 2,
+      codigo: 'VIPA'
+    })
+
+    expect(result).toBeInstanceOf(Blob)
+    expect(fetch).toHaveBeenCalledWith(
+      '/admin/vouchers/export.csv?status=ativo&plano_id=2&codigo=VIPA',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+  })
+
   it('generates admin vouchers', async () => {
     vi.stubGlobal(
       'fetch',

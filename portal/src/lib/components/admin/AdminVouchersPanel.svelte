@@ -1,10 +1,19 @@
 <script lang="ts">
-  import type { AdminVoucher, GenerateAdminVouchersBody, Plano } from '../../types'
+  import type {
+    AdminVoucher,
+    AdminVoucherFilters,
+    AdminVoucherStatusFilter,
+    GenerateAdminVouchersBody,
+    Plano
+  } from '../../types'
 
   export let planos: Plano[] = []
   export let vouchers: AdminVoucher[] = []
   export let loading = false
   export let onGenerateVouchers: (input: GenerateAdminVouchersBody) => void = () => {}
+  export let onApplyVoucherFilters: (filters: AdminVoucherFilters) => void = () => {}
+  export let onDeactivateVoucher: (id: number) => void = () => {}
+  export let onExportVouchers: (filters: AdminVoucherFilters) => void = () => {}
 
   let voucherPlanoID = 0
   let voucherQuantidade = 1
@@ -12,6 +21,11 @@
   let voucherTipo: 'single_use' | 'universal' = 'single_use'
   let voucherUsosMaximos = 1
   let voucherValidadeDias: number | '' = ''
+  let filtroStatus: AdminVoucherStatusFilter = 'ativo'
+  let filtroPlanoID = ''
+  let filtroCodigo = ''
+  let filtroLoteID = ''
+  let confirmDeactivateID: number | null = null
 
   $: if (planos.length > 0 && !planos.some((plano) => plano.id === voucherPlanoID)) {
     voucherPlanoID = planos[0].id
@@ -35,6 +49,41 @@
     }
 
     onGenerateVouchers(body)
+  }
+
+  function currentFilters(): AdminVoucherFilters {
+    const filters: AdminVoucherFilters = {}
+    if (filtroStatus) filters.status = filtroStatus
+
+    const planoID = Number(filtroPlanoID)
+    if (Number.isFinite(planoID) && planoID > 0) filters.plano_id = planoID
+
+    const codigo = filtroCodigo.trim().toUpperCase()
+    if (codigo) filters.codigo = codigo
+
+    const loteID = Number(filtroLoteID)
+    if (Number.isFinite(loteID) && loteID > 0) filters.lote_id = loteID
+
+    return filters
+  }
+
+  function applyFilters() {
+    confirmDeactivateID = null
+    onApplyVoucherFilters(currentFilters())
+  }
+
+  function exportCsv() {
+    onExportVouchers(currentFilters())
+  }
+
+  function requestDeactivate(voucher: AdminVoucher) {
+    if (!voucher.ativo) return
+    if (confirmDeactivateID === voucher.id) {
+      confirmDeactivateID = null
+      onDeactivateVoucher(voucher.id)
+      return
+    }
+    confirmDeactivateID = voucher.id
   }
 </script>
 
@@ -105,16 +154,83 @@
     </button>
   </form>
 
+  <form
+    class="filter-form"
+    aria-label="Filtros de vouchers"
+    onsubmit={(event) => {
+      event.preventDefault()
+      applyFilters()
+    }}
+  >
+    <div class="filter-grid">
+      <label class="field">
+        Status
+        <select bind:value={filtroStatus} disabled={loading}>
+          <option value="ativo">Ativos</option>
+          <option value="inativo">Inativos</option>
+          <option value="todos">Todos</option>
+        </select>
+      </label>
+
+      <label class="field">
+        Plano do filtro
+        <select bind:value={filtroPlanoID} disabled={loading}>
+          <option value="">Todos</option>
+          {#each planos as plano (plano.id)}
+            <option value={String(plano.id)}>{plano.nome}</option>
+          {/each}
+        </select>
+      </label>
+
+      <label class="field">
+        Codigo
+        <input bind:value={filtroCodigo} autocomplete="off" maxlength="32" />
+      </label>
+
+      <label class="field">
+        Lote
+        <input bind:value={filtroLoteID} min="1" type="number" inputmode="numeric" />
+      </label>
+    </div>
+
+    <div class="filter-actions">
+      <button type="submit" class="ink-button" disabled={loading}>Aplicar filtros</button>
+      <button type="button" class="ghost-button" onclick={exportCsv} disabled={loading}>
+        Exportar CSV
+      </button>
+    </div>
+  </form>
+
   <div class="voucher-list">
     {#each vouchers.slice(0, 8) as voucher (voucher.id)}
       <article>
-        <div>
-          <h3>{voucher.codigo}</h3>
-          <p>
-            {voucher.plano.nome} - {voucher.usos_atuais}/{voucher.usos_maximos ?? 1} uso
-          </p>
+        <div class="voucher-main">
+          <div>
+            <h3>{voucher.codigo}</h3>
+            <p>
+              {voucher.plano.nome} - {voucher.usos_atuais}/{voucher.usos_maximos ?? 1} uso
+              {#if voucher.lote_id}
+                - lote {voucher.lote_id}
+              {/if}
+            </p>
+          </div>
         </div>
-        <span class:inactive={!voucher.ativo}>{voucher.ativo ? 'ativo' : 'inativo'}</span>
+        <div class="voucher-actions">
+          <span class:inactive={!voucher.ativo}>{voucher.ativo ? 'ativo' : 'inativo'}</span>
+          {#if voucher.ativo}
+            <button
+              type="button"
+              class:confirming={confirmDeactivateID === voucher.id}
+              onclick={() => requestDeactivate(voucher)}
+              disabled={loading}
+              aria-label={confirmDeactivateID === voucher.id
+                ? `Confirmar desativacao ${voucher.codigo}`
+                : `Desativar ${voucher.codigo}`}
+            >
+              {confirmDeactivateID === voucher.id ? 'Confirmar' : 'Desativar'}
+            </button>
+          {/if}
+        </div>
       </article>
     {:else}
       <div class="empty-state compact">
@@ -174,6 +290,7 @@
   }
 
   .voucher-form .field,
+  .filter-form .field,
   .type-control legend {
     display: grid;
     gap: 6px;
@@ -183,7 +300,9 @@
   }
 
   .voucher-form input:not([type='radio']),
-  .voucher-form select {
+  .voucher-form select,
+  .filter-form input,
+  .filter-form select {
     width: 100%;
     min-height: 42px;
     border: 1px solid var(--color-line);
@@ -191,6 +310,35 @@
     padding: 0 11px;
     background: #f8fafc;
     color: var(--color-ink);
+  }
+
+  .filter-form {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 14px;
+    border-top: 1px solid var(--color-line);
+    padding-top: 14px;
+  }
+
+  .filter-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .filter-actions,
+  .voucher-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .filter-actions {
+    justify-content: stretch;
+  }
+
+  .filter-actions button {
+    flex: 1;
   }
 
   .form-grid {
@@ -254,6 +402,17 @@
     font-weight: 850;
   }
 
+  .ghost-button {
+    min-height: 42px;
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    padding: 0 14px;
+    background: white;
+    color: var(--color-ink);
+    font-size: 0.86rem;
+    font-weight: 850;
+  }
+
   .wide {
     width: 100%;
   }
@@ -270,6 +429,10 @@
     border-radius: 8px;
     padding: 13px;
     background: #fcfdff;
+  }
+
+  .voucher-main {
+    min-width: 0;
   }
 
   .voucher-list h3 {
@@ -299,6 +462,33 @@
     color: #64748b;
   }
 
+  .voucher-actions {
+    flex-shrink: 0;
+    justify-content: flex-end;
+  }
+
+  .voucher-actions button {
+    min-height: 34px;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 0 9px;
+    background: #fff1f2;
+    color: #9f1239;
+    font-size: 0.72rem;
+    font-weight: 900;
+  }
+
+  .voucher-actions button.confirming {
+    border-color: #fb923c;
+    background: #ffedd5;
+    color: #9a3412;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+  }
+
   .empty-state {
     border: 1px dashed var(--color-line);
     border-radius: 8px;
@@ -322,8 +512,25 @@
 
   @media (max-width: 420px) {
     .form-grid,
-    .type-options {
+    .type-options,
+    .filter-grid,
+    .filter-actions {
       grid-template-columns: 1fr;
+    }
+
+    .filter-actions,
+    .voucher-list article,
+    .voucher-actions {
+      align-items: stretch;
+    }
+
+    .voucher-list article,
+    .voucher-actions {
+      flex-direction: column;
+    }
+
+    .voucher-actions {
+      width: 100%;
     }
   }
 </style>

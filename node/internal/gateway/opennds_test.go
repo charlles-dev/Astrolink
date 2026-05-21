@@ -81,10 +81,44 @@ func TestOpenNDSController_Authorize_RetriesTransientCommandFailure(t *testing.T
 	}
 }
 
+func TestOpenNDSController_Diagnostic_BuildsDiagnosticFromRouterCommands(t *testing.T) {
+	runner := &recordingRunner{
+		outputs: map[string]string{
+			"ndsctl status":            "Version: 10.2.0\nCurrent clients: 1\n",
+			"ndsctl clients":           "AA:BB:CC:DD:EE:FF 192.168.1.23 authenticated\n",
+			"ubus call system board":   `{"hostname":"router","model":"OpenWrt One","release":{"distribution":"OpenWrt","version":"24.10.0"}}`,
+			"logread -e opennds -n 50": "opennds log line\n",
+		},
+	}
+	controller := gateway.NewOpenNDSController(runner, gateway.OpenNDSOptions{Retries: 1})
+
+	diagnostic, err := controller.Diagnostic(context.Background())
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantCommands := []string{"ndsctl status", "ndsctl clients", "ubus call system board", "logread -e opennds -n 50"}
+	if len(runner.commands) != len(wantCommands) {
+		t.Fatalf("commands = %#v", runner.commands)
+	}
+	for i, want := range wantCommands {
+		if runner.commands[i] != want {
+			t.Fatalf("command[%d] = %q, want %q", i, runner.commands[i], want)
+		}
+	}
+	if !diagnostic.Online || diagnostic.OpenNDS.Version != "10.2.0" || diagnostic.Board.Hostname != "router" {
+		t.Fatalf("diagnostic = %+v", diagnostic)
+	}
+	if diagnostic.ClientCount != 1 || len(diagnostic.Clients) != 1 || len(diagnostic.RecentLogs) != 1 {
+		t.Fatalf("diagnostic details = %+v", diagnostic)
+	}
+}
+
 type recordingRunner struct {
 	commands []string
 	failures int
 	calls    int
+	outputs  map[string]string
 }
 
 func (r *recordingRunner) Run(_ context.Context, command string) (string, error) {
@@ -93,6 +127,9 @@ func (r *recordingRunner) Run(_ context.Context, command string) (string, error)
 	if r.failures > 0 {
 		r.failures--
 		return "", errors.New("temporary ssh failure")
+	}
+	if output, ok := r.outputs[command]; ok {
+		return output, nil
 	}
 	return "ok", nil
 }

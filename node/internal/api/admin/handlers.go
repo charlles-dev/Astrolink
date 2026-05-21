@@ -31,8 +31,12 @@ func Register(app *fiber.App, deps Dependencies) {
 	protected.Put("/planos/:id", atualizarPlanoHandler(deps))
 	protected.Patch("/planos/:id/status", alterarStatusPlanoHandler(deps))
 	protected.Get("/usuarios", usuariosHandler(deps))
+	protected.Get("/roteadores", roteadoresHandler(deps))
+	protected.Get("/roteadores/:id/diagnostico", roteadorDiagnosticoHandler(deps))
 	protected.Get("/vouchers", vouchersHandler(deps))
+	protected.Get("/vouchers/export.csv", exportVouchersCSVHandler(deps))
 	protected.Post("/vouchers/gerar", gerarVouchersHandler(deps))
+	protected.Patch("/vouchers/:id/desativar", desativarVoucherHandler(deps))
 	protected.Post("/usuarios/:mac/desconectar", desconectarUsuarioHandler(gatewayController))
 }
 
