@@ -5,6 +5,7 @@
   import AdminVouchersPanel from './admin/AdminVouchersPanel.svelte'
   import type {
     AdminHealthResponse,
+    AdminPlanBody,
     AdminUser,
     AdminVoucher,
     GenerateAdminVouchersBody,
@@ -19,6 +20,8 @@
   export let actionMessage = ''
   export let onRefresh: () => void = () => {}
   export let onDisconnect: (mac: string) => void = () => {}
+  export let onSavePlan: (input: AdminPlanBody, id?: number) => Promise<void> | void = () => {}
+  export let onTogglePlanStatus: (id: number, ativo: boolean) => Promise<void> | void = () => {}
   export let onGenerateVouchers: (input: GenerateAdminVouchersBody) => void = () => {}
   export let onLogout: () => void = () => {}
 </script>
@@ -47,7 +50,7 @@
     <AdminUsersPanel {usuarios} {loading} {onDisconnect} />
 
     <aside class="side-stack">
-      <AdminPlansPanel {planos} />
+      <AdminPlansPanel {planos} {loading} {onSavePlan} {onTogglePlanStatus} />
       <AdminVouchersPanel {planos} {vouchers} {loading} {onGenerateVouchers} />
     </aside>
   </div>

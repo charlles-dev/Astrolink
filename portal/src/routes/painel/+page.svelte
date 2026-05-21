@@ -5,6 +5,7 @@
   import AdminDashboard from '$lib/components/AdminDashboard.svelte'
   import type {
     AdminHealthResponse,
+    AdminPlanBody,
     AdminLoginResponse,
     AdminUser,
     AdminVoucher,
@@ -107,6 +108,47 @@
     }
   }
 
+  async function savePlan(input: AdminPlanBody, id?: number) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      if (id) {
+        await api.updateAdminPlano(token, id, input)
+        actionMessage = 'Plano atualizado'
+      } else {
+        await api.createAdminPlano(token, input)
+        actionMessage = 'Plano criado'
+      }
+      const result = await api.getAdminPlanos(token)
+      planos = result.planos
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel salvar o plano')
+      throw error
+    } finally {
+      loading = false
+    }
+  }
+
+  async function togglePlanStatus(id: number, ativo: boolean) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      await api.updateAdminPlanoStatus(token, id, ativo)
+      const result = await api.getAdminPlanos(token)
+      planos = result.planos
+      actionMessage = ativo ? 'Plano ativado' : 'Plano inativado'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel alterar o status do plano')
+      throw error
+    } finally {
+      loading = false
+    }
+  }
+
   function logout() {
     resetSession()
     actionMessage = ''
@@ -147,6 +189,8 @@
     {actionMessage}
     onRefresh={loadDashboard}
     onDisconnect={disconnect}
+    onSavePlan={savePlan}
+    onTogglePlanStatus={togglePlanStatus}
     onGenerateVouchers={generateVouchers}
     onLogout={logout}
   />

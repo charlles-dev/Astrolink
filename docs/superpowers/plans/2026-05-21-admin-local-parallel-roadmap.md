@@ -19,6 +19,7 @@ Implemented:
 - Admin health, plans list, users list, vouchers list/generate, disconnect user.
 - Portal `/painel` UI for health, users, plans, and voucher generation.
 - Wave 0 split completed in commit `782d5bd`: admin backend handlers are separated by domain, and the admin dashboard is split into panel components under `portal/src/lib/components/admin/`.
+- Wave 1 auth/voucher foundation completed in commit `535ef86`: JWT access tokens, refresh/logout/me endpoints, protected admin routes, session persistence, stale-token panel handling, and advanced voucher generation controls.
 
 Out of scope for this roadmap:
 - Admin cloud.
@@ -235,21 +236,21 @@ Deferred:
 
 ### Wave 0: Split Bottleneck Files
 
-- [ ] Create backend route files: `auth.go`, `health.go`, `planos.go`, `usuarios.go`, `vouchers.go`.
-- [ ] Keep `Register` in `handlers.go` as the coordinator.
-- [ ] Split frontend `AdminDashboard.svelte` into `admin/AdminShell.svelte`, `admin/AdminMetrics.svelte`, `admin/AdminUsersPanel.svelte`, `admin/AdminPlansPanel.svelte`, and `admin/AdminVouchersPanel.svelte`.
-- [ ] Move panel-specific tests next to the new components.
-- [ ] Run `go test ./...`, `npm test`, `npm run check`, and `npm run build`.
-- [ ] Commit: `refactor: split admin modules for parallel work`.
+- [x] Create backend route files: `auth.go`, `health.go`, `planos.go`, `usuarios.go`, `vouchers.go`.
+- [x] Keep `Register` in `handlers.go` as the coordinator.
+- [x] Split frontend `AdminDashboard.svelte` into focused panels under `portal/src/lib/components/admin/`.
+- [x] Keep dashboard tests covering the extracted panels.
+- [x] Run `go test ./...`, `npm test`, `npm run check`, and `npm run build`.
+- [x] Commit: `refactor: split admin modules for parallel work`.
 
 ### Wave 1: Safe Parallel Implementation
 
 Run these workers in parallel after Wave 0:
 
-- [ ] Worker A owns Lane A first cut. Started as Auth P0 backend worker; audit logs are deferred to the next auth/audit pass.
-- [ ] Worker B owns Lane B first cut.
-- [ ] Worker C owns Lane C first cut. Started with a frontend-only voucher form expansion because the backend already accepts the extra generation fields.
-- [ ] Worker D owns Lane D first cut.
+- [x] Worker A owns Lane A first cut. JWT, refresh, logout, me, and middleware are done; audit/session-bound token hardening remains deferred.
+- [x] Worker B owns Lane B first cut. Backend and frontend plan CRUD are done in Wave 1B.
+- [x] Worker C owns Lane C generation-form foundation. Advanced generation fields are done; filter/export/deactivate operations remain.
+- [ ] Worker D owns Lane D first cut. Parser/diagnostic foundation is done in Wave 1B; admin HTTP wiring remains.
 
 Conflict rule:
 - Only one worker may edit `store.Store` at a time. If workers need new store methods, each worker should prepare a patch in its lane and the coordinator integrates the shared interface changes.
@@ -268,6 +269,31 @@ Run after Wave 1 is merged:
 - [ ] Coordinator integrates shared store/API type changes.
 - [ ] Full verification and browser pass.
 - [ ] Commit: `feat: add local reporting and operations`.
+
+### Wave 1B: Current Parallel Dispatch
+
+Run after commit `535ef86`:
+
+- [x] Agent Plans Backend owns backend CRUD for plans only. It may edit `node/internal/api/admin/planos.go`, `node/internal/api/admin/handlers.go`, `node/internal/domain/planos/`, `node/internal/store/store.go`, `node/internal/infra/memory/store.go`, `node/internal/infra/postgres/store.go`, and backend admin tests. It must not edit portal files.
+- [x] Agent Plans Frontend owns the `/painel` plan-management UI only. It may edit `portal/src/lib/components/admin/AdminPlansPanel.svelte`, create `AdminPlanForm.svelte`, and update `portal/src/lib/api.ts`, `portal/src/lib/types.ts`, `portal/src/routes/painel/+page.svelte`, and portal tests. It must follow the backend CRUD contract from Lane B.
+- [x] Agent Router Diagnostics owns parser and gateway diagnostic foundations only. It may edit `node/internal/gateway/` and add gateway tests. It must not edit admin routes or shared store files in this wave.
+- [x] Coordinator integrates returned patches, resolves any shared API/type mismatch, runs full backend/frontend verification, and performs browser verification on `/painel`.
+
+Wave 1B verification:
+- `go test ./...` in `node`
+- `npm test`, `npm run check`, and `npm run build` in `portal`
+- `git diff --check`
+- Browser verification on `http://127.0.0.1:5173/painel`: login, plan form visible, create plan success message, and plan count update.
+
+Active agents:
+- Backend plans: Dirac (`019e4b57-4344-7572-904b-474283a76b6a`)
+- Frontend plans: Mendel (`019e4b57-5b8e-7db2-bb76-ef852ca2e1d5`)
+- Router diagnostics: Averroes (`019e4b57-73e6-7c32-a2ae-41bc9b28cd6d`)
+
+Plan CRUD contract for this repository:
+- Create/update body fields: `nome`, `descricao`, `preco`, `duracao_minutos`, `dados_mb`, `velocidade_down`, `velocidade_up`, `recomendado`, `ativo`, `visivel_portal`, `ordem`.
+- Status body: `{ "ativo": true | false }`.
+- Create/update/status response: `{ "plano": <Plano> }`.
 
 ### Wave 3: Polish and Deferred Items
 

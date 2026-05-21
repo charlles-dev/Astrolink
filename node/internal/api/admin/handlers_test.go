@@ -130,6 +130,186 @@ func TestGerarVouchers_RetornaCodigosCriados(t *testing.T) {
 	}
 }
 
+func TestCriarPlano_RetornaPlanoCriado(t *testing.T) {
+	app := fiber.New()
+	repo := &fakeStore{
+		createdPlano: planos.Plano{
+			ID:               10,
+			Nome:             "Noite",
+			Descricao:        "Acesso noturno",
+			Preco:            12.5,
+			PrecoFormatado:   "12.50",
+			DuracaoMinutos:   intPtr(480),
+			DuracaoFormatada: "8 horas",
+			DadosMB:          intPtr(2048),
+			VelocidadeDown:   30,
+			VelocidadeUp:     10,
+			Recomendado:      true,
+			Ativo:            true,
+			VisivelPortal:    true,
+			Ordem:            4,
+		},
+	}
+	admin.Register(app, admin.Dependencies{Config: testConfig(), Store: repo, Gateway: &fakeGateway{}})
+	tokens := loginAdmin(t, app)
+
+	body := strings.NewReader(`{"nome":"Noite","descricao":"Acesso noturno","preco":12.5,"duracao_minutos":480,"dados_mb":2048,"velocidade_down":30,"velocidade_up":10,"recomendado":true,"ativo":true,"visivel_portal":true,"ordem":4}`)
+	req := httptest.NewRequest("POST", "/admin/planos", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 201 {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(payload))
+	}
+	if repo.createPlanoInput.Nome != "Noite" || repo.createPlanoInput.Preco != 12.5 || repo.createPlanoInput.VelocidadeDown != 30 || repo.createPlanoInput.VelocidadeUp != 10 {
+		t.Fatalf("input recebido = %+v", repo.createPlanoInput)
+	}
+	var got struct {
+		Plano planos.Plano `json:"plano"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Plano.ID != 10 || got.Plano.PrecoFormatado != "12.50" || got.Plano.DadosMB == nil || *got.Plano.DadosMB != 2048 {
+		t.Fatalf("plano inesperado: %+v", got.Plano)
+	}
+}
+
+func TestAtualizarPlano_RetornaPlanoEditado(t *testing.T) {
+	app := fiber.New()
+	repo := &fakeStore{
+		updatedPlano: planos.Plano{
+			ID:               2,
+			Nome:             "Dia inteiro",
+			Descricao:        "24 horas",
+			Preco:            18,
+			PrecoFormatado:   "18.00",
+			DuracaoMinutos:   intPtr(1440),
+			DuracaoFormatada: "24 horas",
+			VelocidadeDown:   50,
+			VelocidadeUp:     20,
+			Recomendado:      true,
+			Ativo:            true,
+			VisivelPortal:    false,
+			Ordem:            1,
+		},
+	}
+	admin.Register(app, admin.Dependencies{Config: testConfig(), Store: repo, Gateway: &fakeGateway{}})
+	tokens := loginAdmin(t, app)
+
+	body := strings.NewReader(`{"nome":"Dia inteiro","descricao":"24 horas","preco":18,"duracao_minutos":1440,"velocidade_down":50,"velocidade_up":20,"recomendado":true,"ativo":true,"visivel_portal":false,"ordem":1}`)
+	req := httptest.NewRequest("PUT", "/admin/planos/2", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(payload))
+	}
+	if repo.updatePlanoID != 2 || repo.updatePlanoInput.Nome != "Dia inteiro" || repo.updatePlanoInput.VisivelPortal {
+		t.Fatalf("update recebido id=%d input=%+v", repo.updatePlanoID, repo.updatePlanoInput)
+	}
+	var got struct {
+		Plano planos.Plano `json:"plano"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Plano.ID != 2 || got.Plano.VelocidadeDown != 50 || got.Plano.VisivelPortal {
+		t.Fatalf("plano inesperado: %+v", got.Plano)
+	}
+}
+
+func TestAlterarStatusPlano_RetornaPlanoAtualizado(t *testing.T) {
+	app := fiber.New()
+	repo := &fakeStore{
+		statusPlano: planos.Plano{
+			ID:               3,
+			Nome:             "Semanal",
+			PrecoFormatado:   "50.00",
+			DuracaoFormatada: "7 dias",
+			Ativo:            false,
+			VisivelPortal:    true,
+		},
+	}
+	admin.Register(app, admin.Dependencies{Config: testConfig(), Store: repo, Gateway: &fakeGateway{}})
+	tokens := loginAdmin(t, app)
+
+	req := httptest.NewRequest("PATCH", "/admin/planos/3/status", strings.NewReader(`{"ativo":false}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(payload))
+	}
+	if repo.statusPlanoID != 3 || repo.statusPlanoAtivo {
+		t.Fatalf("status recebido id=%d ativo=%v", repo.statusPlanoID, repo.statusPlanoAtivo)
+	}
+	var got struct {
+		Plano planos.Plano `json:"plano"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Plano.ID != 3 || got.Plano.Ativo {
+		t.Fatalf("plano inesperado: %+v", got.Plano)
+	}
+}
+
+func TestCriarPlano_ValidaPayload(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{name: "nome obrigatorio", body: `{"preco":1,"duracao_minutos":60,"velocidade_down":1,"velocidade_up":1,"ordem":1}`},
+		{name: "preco nao negativo", body: `{"nome":"x","preco":-1,"duracao_minutos":60,"velocidade_down":1,"velocidade_up":1,"ordem":1}`},
+		{name: "duracao positiva", body: `{"nome":"x","preco":1,"duracao_minutos":0,"velocidade_down":1,"velocidade_up":1,"ordem":1}`},
+		{name: "velocidade nao negativa", body: `{"nome":"x","preco":1,"duracao_minutos":60,"velocidade_down":-1,"velocidade_up":1,"ordem":1}`},
+		{name: "ordem razoavel", body: `{"nome":"x","preco":1,"duracao_minutos":60,"velocidade_down":1,"velocidade_up":1,"ordem":1000000}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := fiber.New()
+			repo := &fakeStore{}
+			admin.Register(app, admin.Dependencies{Config: testConfig(), Store: repo, Gateway: &fakeGateway{}})
+			tokens := loginAdmin(t, app)
+
+			req := httptest.NewRequest("POST", "/admin/planos", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+			resp, err := app.Test(req, -1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 400 {
+				payload, _ := io.ReadAll(resp.Body)
+				t.Fatalf("status = %d body=%s", resp.StatusCode, string(payload))
+			}
+			if repo.createPlanoCalled {
+				t.Fatal("store nao deve ser chamado para payload invalido")
+			}
+		})
+	}
+}
+
 func TestLogin_RetornaJWTAssinadoERefreshOpaco(t *testing.T) {
 	app := fiber.New()
 	repo := &fakeStore{}
@@ -296,6 +476,15 @@ type fakeStore struct {
 	vouchers                  []store.AdminVoucher
 	generated                 store.GenerateVouchersResult
 	generateInput             store.GenerateVouchersInput
+	createdPlano              planos.Plano
+	updatedPlano              planos.Plano
+	statusPlano               planos.Plano
+	createPlanoInput          store.AdminPlanoInput
+	updatePlanoInput          store.AdminPlanoInput
+	updatePlanoID             int
+	statusPlanoID             int
+	statusPlanoAtivo          bool
+	createPlanoCalled         bool
 	createdSessions           []store.CreateAdminSessionInput
 	rotatedRefreshTokenHashes []string
 	revokedRefreshTokenHashes []string
@@ -327,6 +516,24 @@ func (f fakeStore) AdminVouchers(context.Context) ([]store.AdminVoucher, error) 
 func (f *fakeStore) GenerateVouchers(_ context.Context, input store.GenerateVouchersInput) (store.GenerateVouchersResult, error) {
 	f.generateInput = input
 	return f.generated, nil
+}
+
+func (f *fakeStore) CreateAdminPlano(_ context.Context, input store.AdminPlanoInput) (planos.Plano, error) {
+	f.createPlanoCalled = true
+	f.createPlanoInput = input
+	return f.createdPlano, nil
+}
+
+func (f *fakeStore) UpdateAdminPlano(_ context.Context, id int, input store.AdminPlanoInput) (planos.Plano, error) {
+	f.updatePlanoID = id
+	f.updatePlanoInput = input
+	return f.updatedPlano, nil
+}
+
+func (f *fakeStore) SetAdminPlanoStatus(_ context.Context, id int, ativo bool) (planos.Plano, error) {
+	f.statusPlanoID = id
+	f.statusPlanoAtivo = ativo
+	return f.statusPlano, nil
 }
 
 func (f *fakeStore) CreateAdminSession(_ context.Context, input store.CreateAdminSessionInput) error {
@@ -439,4 +646,8 @@ func loginAdmin(t *testing.T, app *fiber.App) authResponse {
 func strconvQuote(value string) string {
 	encoded, _ := json.Marshal(value)
 	return string(encoded)
+}
+
+func intPtr(value int) *int {
+	return &value
 }

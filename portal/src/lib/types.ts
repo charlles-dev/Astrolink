@@ -30,6 +30,24 @@ export interface PlanosResponse {
   planos: Plano[]
 }
 
+export interface AdminPlanBody {
+  nome: string
+  descricao: string
+  preco: number
+  duracao_minutos: number | null
+  dados_mb: number | null
+  velocidade_down: number
+  velocidade_up: number
+  recomendado: boolean
+  ativo: boolean
+  visivel_portal: boolean
+  ordem: number
+}
+
+export interface AdminPlanResponse {
+  plano: Plano
+}
+
 export interface SessaoStatus {
   ativa: boolean
   plano?: string

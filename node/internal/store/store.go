@@ -34,6 +34,12 @@ type AdminAuthStore interface {
 	RevokeAdminSession(context.Context, string) error
 }
 
+type AdminPlanosStore interface {
+	CreateAdminPlano(context.Context, AdminPlanoInput) (planos.Plano, error)
+	UpdateAdminPlano(context.Context, int, AdminPlanoInput) (planos.Plano, error)
+	SetAdminPlanoStatus(context.Context, int, bool) (planos.Plano, error)
+}
+
 type Settings struct {
 	HotspotNome        string `json:"hotspot_nome"`
 	HotspotLogoURL     string `json:"hotspot_logo_url"`
@@ -143,6 +149,20 @@ type GenerateVouchersResult struct {
 	LoteID     int            `json:"lote_id"`
 	Quantidade int            `json:"quantidade"`
 	Vouchers   []AdminVoucher `json:"vouchers"`
+}
+
+type AdminPlanoInput struct {
+	Nome           string
+	Descricao      string
+	Preco          float64
+	DuracaoMinutos *int
+	DadosMB        *int
+	VelocidadeDown int
+	VelocidadeUp   int
+	Recomendado    bool
+	Ativo          bool
+	VisivelPortal  bool
+	Ordem          int
 }
 
 type AdminSession struct {

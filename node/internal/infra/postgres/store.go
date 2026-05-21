@@ -58,6 +58,98 @@ func (s *Store) AdminPlanos(ctx context.Context) ([]planos.Plano, error) {
 	return s.queryPlanos(ctx, `SELECT id, nome, descricao, preco::text, duracao_minutos, dados_mb, velocidade_down, velocidade_up, recomendado, ativo, visivel_portal, ordem FROM planos ORDER BY ordem ASC, id ASC`)
 }
 
+func (s *Store) CreateAdminPlano(ctx context.Context, input store.AdminPlanoInput) (planos.Plano, error) {
+	now := s.clock().UTC()
+	row := s.db.QueryRowContext(ctx, `
+		INSERT INTO planos (
+			nome, descricao, preco, duracao_minutos, dados_mb,
+			velocidade_down, velocidade_up, recomendado, ativo, visivel_portal,
+			ordem, created_at, updated_at
+		)
+		VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
+		RETURNING id, nome, descricao, preco::text, duracao_minutos, dados_mb, velocidade_down, velocidade_up, recomendado, ativo, visivel_portal, ordem`,
+		input.Nome,
+		input.Descricao,
+		input.Preco,
+		nullableInt(input.DuracaoMinutos),
+		nullableInt(input.DadosMB),
+		input.VelocidadeDown,
+		input.VelocidadeUp,
+		input.Recomendado,
+		input.Ativo,
+		input.VisivelPortal,
+		input.Ordem,
+		now,
+	)
+	plano, err := scanPlano(row)
+	if err != nil {
+		return planos.Plano{}, fmt.Errorf("criar plano: %w", err)
+	}
+	return plano, nil
+}
+
+func (s *Store) UpdateAdminPlano(ctx context.Context, id int, input store.AdminPlanoInput) (planos.Plano, error) {
+	row := s.db.QueryRowContext(ctx, `
+		UPDATE planos
+		SET
+			nome = $2,
+			descricao = NULLIF($3, ''),
+			preco = $4,
+			duracao_minutos = $5,
+			dados_mb = $6,
+			velocidade_down = $7,
+			velocidade_up = $8,
+			recomendado = $9,
+			ativo = $10,
+			visivel_portal = $11,
+			ordem = $12,
+			updated_at = $13
+		WHERE id = $1
+		RETURNING id, nome, descricao, preco::text, duracao_minutos, dados_mb, velocidade_down, velocidade_up, recomendado, ativo, visivel_portal, ordem`,
+		id,
+		input.Nome,
+		input.Descricao,
+		input.Preco,
+		nullableInt(input.DuracaoMinutos),
+		nullableInt(input.DadosMB),
+		input.VelocidadeDown,
+		input.VelocidadeUp,
+		input.Recomendado,
+		input.Ativo,
+		input.VisivelPortal,
+		input.Ordem,
+		s.clock().UTC(),
+	)
+	plano, err := scanPlano(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return planos.Plano{}, store.ErrPlanoNotFound
+	}
+	if err != nil {
+		return planos.Plano{}, fmt.Errorf("atualizar plano: %w", err)
+	}
+	return plano, nil
+}
+
+func (s *Store) SetAdminPlanoStatus(ctx context.Context, id int, ativo bool) (planos.Plano, error) {
+	row := s.db.QueryRowContext(ctx, `
+		UPDATE planos
+		SET ativo = $2, updated_at = $3
+		WHERE id = $1
+		RETURNING id, nome, descricao, preco::text, duracao_minutos, dados_mb, velocidade_down, velocidade_up, recomendado, ativo, visivel_portal, ordem`,
+		id,
+		ativo,
+		s.clock().UTC(),
+	)
+	plano, err := scanPlano(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return planos.Plano{}, store.ErrPlanoNotFound
+	}
+	if err != nil {
+		return planos.Plano{}, fmt.Errorf("alterar status do plano: %w", err)
+	}
+	return plano, nil
+}
+
 func (s *Store) Usuarios(ctx context.Context) ([]store.Usuario, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT
@@ -716,4 +808,11 @@ func normalizeMAC(mac string) string {
 
 func normalizeVoucherCode(code string) string {
 	return strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(code), " ", "-"))
+}
+
+func nullableInt(value *int) sql.NullInt64 {
+	if value == nil {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(*value), Valid: true}
 }

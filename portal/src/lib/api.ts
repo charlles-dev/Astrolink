@@ -1,6 +1,8 @@
 import type {
   GerarPixBody,
   AdminHealthResponse,
+  AdminPlanBody,
+  AdminPlanResponse,
   AdminLoginBody,
   AdminLoginResponse,
   AdminVouchersResponse,
@@ -81,6 +83,12 @@ export function createApiClient(baseURL = '') {
       request<AdminHealthResponse>('GET', '/admin/sistema/saude', undefined, token),
     getAdminPlanos: (token: string) =>
       request<PlanosResponse>('GET', '/admin/planos', undefined, token),
+    createAdminPlano: (token: string, body: AdminPlanBody) =>
+      request<AdminPlanResponse>('POST', '/admin/planos', body, token),
+    updateAdminPlano: (token: string, id: number, body: AdminPlanBody) =>
+      request<AdminPlanResponse>('PUT', `/admin/planos/${id}`, body, token),
+    updateAdminPlanoStatus: (token: string, id: number, ativo: boolean) =>
+      request<AdminPlanResponse>('PATCH', `/admin/planos/${id}/status`, { ativo }, token),
     getAdminUsuarios: (token: string) =>
       request<AdminUsersResponse>('GET', '/admin/usuarios', undefined, token),
     disconnectAdminUsuario: (token: string, mac: string) =>

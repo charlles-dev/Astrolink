@@ -19,21 +19,53 @@ type Plano struct {
 	Ordem            int     `json:"ordem"`
 }
 
+type Config struct {
+	ID             int
+	Nome           string
+	Descricao      string
+	Preco          float64
+	DuracaoMinutos *int
+	DadosMB        *int
+	VelocidadeDown int
+	VelocidadeUp   int
+	Recomendado    bool
+	Ativo          bool
+	VisivelPortal  bool
+	Ordem          int
+}
+
 func New(id int, nome, descricao string, preco float64, duracaoMinutos *int, recomendado bool, ordem int) Plano {
+	return FromConfig(Config{
+		ID:             id,
+		Nome:           nome,
+		Descricao:      descricao,
+		Preco:          preco,
+		DuracaoMinutos: duracaoMinutos,
+		VelocidadeDown: 10,
+		VelocidadeUp:   5,
+		Recomendado:    recomendado,
+		Ativo:          true,
+		VisivelPortal:  true,
+		Ordem:          ordem,
+	})
+}
+
+func FromConfig(config Config) Plano {
 	return Plano{
-		ID:               id,
-		Nome:             nome,
-		Descricao:        descricao,
-		Preco:            preco,
-		PrecoFormatado:   fmt.Sprintf("%.2f", preco),
-		DuracaoMinutos:   duracaoMinutos,
-		DuracaoFormatada: FormatDuration(duracaoMinutos),
-		VelocidadeDown:   10,
-		VelocidadeUp:     5,
-		Recomendado:      recomendado,
-		Ativo:            true,
-		VisivelPortal:    true,
-		Ordem:            ordem,
+		ID:               config.ID,
+		Nome:             config.Nome,
+		Descricao:        config.Descricao,
+		Preco:            config.Preco,
+		PrecoFormatado:   fmt.Sprintf("%.2f", config.Preco),
+		DuracaoMinutos:   config.DuracaoMinutos,
+		DuracaoFormatada: FormatDuration(config.DuracaoMinutos),
+		DadosMB:          config.DadosMB,
+		VelocidadeDown:   config.VelocidadeDown,
+		VelocidadeUp:     config.VelocidadeUp,
+		Recomendado:      config.Recomendado,
+		Ativo:            config.Ativo,
+		VisivelPortal:    config.VisivelPortal,
+		Ordem:            config.Ordem,
 	}
 }
 

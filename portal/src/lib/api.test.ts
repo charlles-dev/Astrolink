@@ -158,4 +158,100 @@ describe('createApiClient', () => {
       })
     )
   })
+
+  it('creates an admin plan with bearer token', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ plano: { id: 3, nome: 'Noite Livre' } }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+    )
+
+    const body = {
+      nome: 'Noite Livre',
+      descricao: 'Acesso noturno',
+      preco: 9.9,
+      duracao_minutos: 480,
+      dados_mb: 2048,
+      velocidade_down: 20,
+      velocidade_up: 8,
+      recomendado: true,
+      ativo: true,
+      visivel_portal: false,
+      ordem: 3
+    }
+
+    const api = createApiClient('')
+    const result = await api.createAdminPlano('token-123', body)
+
+    expect(result.plano.nome).toBe('Noite Livre')
+    expect(fetch).toHaveBeenCalledWith(
+      '/admin/planos',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' }),
+        body: JSON.stringify(body)
+      })
+    )
+  })
+
+  it('updates an admin plan and toggles status with bearer token', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ plano: { id: 3, nome: 'Noite Livre' } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' }
+          })
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ plano: { id: 3, ativo: false } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' }
+          })
+        )
+    )
+
+    const body = {
+      nome: 'Noite Livre',
+      descricao: '',
+      preco: 10,
+      duracao_minutos: 480,
+      dados_mb: null,
+      velocidade_down: 20,
+      velocidade_up: 8,
+      recomendado: false,
+      ativo: true,
+      visivel_portal: true,
+      ordem: 3
+    }
+
+    const api = createApiClient('')
+    await api.updateAdminPlano('token-123', 3, body)
+    await api.updateAdminPlanoStatus('token-123', 3, false)
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      '/admin/planos/3',
+      expect.objectContaining({
+        method: 'PUT',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' }),
+        body: JSON.stringify(body)
+      })
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      '/admin/planos/3/status',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' }),
+        body: JSON.stringify({ ativo: false })
+      })
+    )
+  })
 })

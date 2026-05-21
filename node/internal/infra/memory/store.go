@@ -21,6 +21,7 @@ type Store struct {
 	usuarios      map[string]store.Usuario
 	pix           map[string]store.PixTransaction
 	adminSessions map[string]store.AdminSession
+	nextPlanoID   int
 	nextVoucherID int
 	nextLoteID    int
 }
@@ -46,6 +47,7 @@ func NewStore() *Store {
 		usuarios:      map[string]store.Usuario{},
 		pix:           map[string]store.PixTransaction{},
 		adminSessions: map[string]store.AdminSession{},
+		nextPlanoID:   4,
 		nextVoucherID: 3,
 		nextLoteID:    1,
 	}
@@ -68,7 +70,7 @@ func (s *Store) PortalPlanos(_ context.Context) ([]planos.Plano, error) {
 	}
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].Ordem == result[j].Ordem {
-			return result[i].Preco < result[j].Preco
+			return result[i].ID < result[j].ID
 		}
 		return result[i].Ordem < result[j].Ordem
 	})
@@ -80,7 +82,44 @@ func (s *Store) AdminPlanos(_ context.Context) ([]planos.Plano, error) {
 	defer s.mu.RUnlock()
 	result := make([]planos.Plano, len(s.planos))
 	copy(result, s.planos)
+	sortPlanos(result)
 	return result, nil
+}
+
+func (s *Store) CreateAdminPlano(_ context.Context, input store.AdminPlanoInput) (planos.Plano, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	plano := planoFromInput(s.nextPlanoID, input)
+	s.nextPlanoID++
+	s.planos = append(s.planos, plano)
+	sortPlanos(s.planos)
+	return plano, nil
+}
+
+func (s *Store) UpdateAdminPlano(_ context.Context, id int, input store.AdminPlanoInput) (planos.Plano, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.planos {
+		if s.planos[i].ID == id {
+			plano := planoFromInput(id, input)
+			s.planos[i] = plano
+			sortPlanos(s.planos)
+			return plano, nil
+		}
+	}
+	return planos.Plano{}, store.ErrPlanoNotFound
+}
+
+func (s *Store) SetAdminPlanoStatus(_ context.Context, id int, ativo bool) (planos.Plano, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.planos {
+		if s.planos[i].ID == id {
+			s.planos[i].Ativo = ativo
+			return s.planos[i], nil
+		}
+	}
+	return planos.Plano{}, store.ErrPlanoNotFound
 }
 
 func (s *Store) Usuarios(_ context.Context) ([]store.Usuario, error) {
@@ -329,6 +368,40 @@ func (s *Store) findPlano(id int) (planos.Plano, error) {
 		}
 	}
 	return planos.Plano{}, store.ErrPlanoNotFound
+}
+
+func planoFromInput(id int, input store.AdminPlanoInput) planos.Plano {
+	return planos.FromConfig(planos.Config{
+		ID:             id,
+		Nome:           input.Nome,
+		Descricao:      input.Descricao,
+		Preco:          input.Preco,
+		DuracaoMinutos: cloneInt(input.DuracaoMinutos),
+		DadosMB:        cloneInt(input.DadosMB),
+		VelocidadeDown: input.VelocidadeDown,
+		VelocidadeUp:   input.VelocidadeUp,
+		Recomendado:    input.Recomendado,
+		Ativo:          input.Ativo,
+		VisivelPortal:  input.VisivelPortal,
+		Ordem:          input.Ordem,
+	})
+}
+
+func cloneInt(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func sortPlanos(items []planos.Plano) {
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Ordem == items[j].Ordem {
+			return items[i].ID < items[j].ID
+		}
+		return items[i].Ordem < items[j].Ordem
+	})
 }
 
 func normalizeMAC(mac string) string {
