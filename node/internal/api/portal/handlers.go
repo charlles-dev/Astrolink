@@ -4,14 +4,32 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/astrolink/node/internal/domain/vouchers"
+	"github.com/astrolink/node/internal/gateway"
 	"github.com/astrolink/node/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
 
-func Register(app *fiber.App, appStore store.Store) {
+type Dependencies struct {
+	Store   store.Store
+	Gateway gateway.Controller
+	Logger  *slog.Logger
+}
+
+func Register(app *fiber.App, deps Dependencies) {
+	appStore := deps.Store
+	gatewayController := deps.Gateway
+	if gatewayController == nil {
+		gatewayController = gateway.NoopController{}
+	}
+	logger := deps.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	app.Get("/api/settings", func(c *fiber.Ctx) error {
 		settings, err := appStore.Settings(requestContext(c))
 		if err != nil {
@@ -117,9 +135,21 @@ func Register(app *fiber.App, appStore store.Store) {
 		if err != nil {
 			return voucherError(c, err)
 		}
-		minutes := 0
+		minutes := 60
 		if result.Plano.DuracaoMinutos != nil {
 			minutes = *result.Plano.DuracaoMinutos
+		}
+		mac := result.Usuario.MAC
+		if mac == "" {
+			mac = body.MAC
+		}
+		routerAuthorized := true
+		if err := gatewayController.Authorize(requestContext(c), gateway.Authorization{
+			MAC:      mac,
+			Duration: time.Duration(minutes) * time.Minute,
+		}); err != nil {
+			routerAuthorized = false
+			logger.Warn("falha ao autorizar cliente no OpenNDS", "mac", mac, "error", err)
 		}
 		return c.JSON(fiber.Map{
 			"sucesso":                  true,
@@ -128,6 +158,7 @@ func Register(app *fiber.App, appStore store.Store) {
 			"fim_acesso":               result.Usuario.FimAcesso,
 			"tempo_restante_segundos":  result.Usuario.TempoRestanteSegundos,
 			"acesso_anterior":          result.HadAccess,
+			"roteador_autorizado":      routerAuthorized,
 		})
 	})
 }

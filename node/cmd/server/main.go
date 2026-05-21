@@ -8,6 +8,7 @@ import (
 
 	"github.com/astrolink/node/internal/api"
 	"github.com/astrolink/node/internal/config"
+	"github.com/astrolink/node/internal/gateway"
 	"github.com/astrolink/node/internal/infra/memory"
 	"github.com/astrolink/node/internal/infra/postgres"
 	"github.com/astrolink/node/internal/store"
@@ -18,9 +19,10 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
 	appStore := buildStore(cfg, logger)
 	app := api.NewServer(api.Dependencies{
-		Config: cfg,
-		Logger: logger,
-		Store:  appStore,
+		Config:  cfg,
+		Logger:  logger,
+		Store:   appStore,
+		Gateway: buildGateway(cfg, logger),
 	})
 
 	logger.Info("starting astrolink node", "addr", cfg.HTTPAddr)
@@ -28,6 +30,27 @@ func main() {
 		logger.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+func buildGateway(cfg config.Config, logger *slog.Logger) gateway.Controller {
+	if !cfg.OpenNDSEnabled {
+		logger.Info("OpenNDS desabilitado; usando gateway no-op")
+		return gateway.NoopController{}
+	}
+	if cfg.OpenNDSHost == "" || cfg.OpenNDSKeyPath == "" {
+		logger.Warn("OpenNDS habilitado sem host ou chave SSH; usando gateway no-op")
+		return gateway.NoopController{}
+	}
+	runner := gateway.NewSSHRunner(gateway.SSHConfig{
+		Host:    cfg.OpenNDSHost,
+		Port:    cfg.OpenNDSPort,
+		User:    cfg.OpenNDSUser,
+		KeyPath: cfg.OpenNDSKeyPath,
+		Timeout: cfg.OpenNDSTimeout,
+	})
+	return gateway.NewOpenNDSController(runner, gateway.OpenNDSOptions{
+		Retries: cfg.OpenNDSRetries,
+	})
 }
 
 func buildStore(cfg config.Config, logger *slog.Logger) store.Store {

@@ -7,17 +7,22 @@ import (
 	"github.com/astrolink/node/internal/api/admin"
 	"github.com/astrolink/node/internal/api/portal"
 	"github.com/astrolink/node/internal/config"
+	"github.com/astrolink/node/internal/gateway"
 	"github.com/astrolink/node/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
 
 type Dependencies struct {
-	Config config.Config
-	Logger *slog.Logger
-	Store  store.Store
+	Config  config.Config
+	Logger  *slog.Logger
+	Store   store.Store
+	Gateway gateway.Controller
 }
 
 func NewServer(deps Dependencies) *fiber.App {
+	if deps.Gateway == nil {
+		deps.Gateway = gateway.NoopController{}
+	}
 	app := fiber.New(fiber.Config{
 		AppName:     "Astrolink Node",
 		ReadTimeout: 10 * time.Second,
@@ -34,10 +39,15 @@ func NewServer(deps Dependencies) *fiber.App {
 		})
 	})
 
-	portal.Register(app, deps.Store)
+	portal.Register(app, portal.Dependencies{
+		Store:   deps.Store,
+		Gateway: deps.Gateway,
+		Logger:  deps.Logger,
+	})
 	admin.Register(app, admin.Dependencies{
-		Config: deps.Config,
-		Store:  deps.Store,
+		Config:  deps.Config,
+		Store:   deps.Store,
+		Gateway: deps.Gateway,
 	})
 	return app
 }

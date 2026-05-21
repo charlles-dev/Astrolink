@@ -10,13 +10,14 @@ import (
 
 	"github.com/astrolink/node/internal/api/portal"
 	"github.com/astrolink/node/internal/domain/planos"
+	"github.com/astrolink/node/internal/gateway"
 	"github.com/astrolink/node/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
 
 func TestResgatarVoucher_CodigoInexistente_Retorna404(t *testing.T) {
 	app := fiber.New()
-	portal.Register(app, fakeStore{redeemErr: store.ErrVoucherNotFound})
+	portal.Register(app, portal.Dependencies{Store: fakeStore{redeemErr: store.ErrVoucherNotFound}})
 
 	req := httptest.NewRequest("POST", "/api/voucher/resgatar", strings.NewReader(`{
 		"codigo": "XXXX-9999",
@@ -42,6 +43,7 @@ func TestResgatarVoucher_CodigoInexistente_Retorna404(t *testing.T) {
 
 func TestResgatarVoucher_Sucesso_RetornaContratoDoPortal(t *testing.T) {
 	app := fiber.New()
+	router := &fakeGateway{}
 	duracao := 1440
 	fim := time.Date(2026, 5, 22, 6, 34, 0, 0, time.UTC)
 	appStore := fakeStore{
@@ -60,7 +62,7 @@ func TestResgatarVoucher_Sucesso_RetornaContratoDoPortal(t *testing.T) {
 			HadAccess: false,
 		},
 	}
-	portal.Register(app, appStore)
+	portal.Register(app, portal.Dependencies{Store: appStore, Gateway: router})
 
 	req := httptest.NewRequest("POST", "/api/voucher/resgatar", strings.NewReader(`{
 		"codigo": "TEST-1234",
@@ -83,10 +85,21 @@ func TestResgatarVoucher_Sucesso_RetornaContratoDoPortal(t *testing.T) {
 		`"sucesso":true`,
 		`"plano":"Acesso 24 Horas"`,
 		`"tempo_adicionado_minutos":1440`,
+		`"roteador_autorizado":true`,
 	} {
 		if !strings.Contains(string(body), want) {
 			t.Fatalf("resposta nao contem %s: %s", want, string(body))
 		}
+	}
+	if len(router.authorizations) != 1 {
+		t.Fatalf("authorizations len = %d, want 1", len(router.authorizations))
+	}
+	got := router.authorizations[0]
+	if got.MAC != "AA:BB:CC:DD:EE:FF" {
+		t.Fatalf("authorized MAC = %q", got.MAC)
+	}
+	if got.Duration != 24*time.Hour {
+		t.Fatalf("duration = %s, want 24h", got.Duration)
 	}
 }
 
@@ -129,4 +142,25 @@ func (f fakeStore) RedeemVoucher(context.Context, store.RedeemVoucherInput) (sto
 
 func (f fakeStore) Health(context.Context) store.Health {
 	return store.Health{}
+}
+
+type fakeGateway struct {
+	authorizations []gateway.Authorization
+	deauths        []string
+	authErr        error
+	deauthErr      error
+}
+
+func (f *fakeGateway) Authorize(_ context.Context, input gateway.Authorization) error {
+	f.authorizations = append(f.authorizations, input)
+	return f.authErr
+}
+
+func (f *fakeGateway) Deauthorize(_ context.Context, mac string) error {
+	f.deauths = append(f.deauths, mac)
+	return f.deauthErr
+}
+
+func (f *fakeGateway) Ping(context.Context) (time.Duration, error) {
+	return 0, nil
 }

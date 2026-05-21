@@ -75,6 +75,15 @@ ADMIN_SENHA=admin123
 # Node identification
 NODE_NAME=dev-node-01
 TIMEZONE=America/Sao_Paulo
+
+# OpenNDS/OpenWrt (desabilitado por padrao no desenvolvimento local)
+OPENNDS_ENABLED=false
+OPENNDS_SSH_HOST=192.168.1.1
+OPENNDS_SSH_PORT=22
+OPENNDS_SSH_USER=root
+OPENNDS_SSH_KEY_PATH=C:\Users\charl\.ssh\id_ed25519
+OPENNDS_SSH_TIMEOUT=10s
+OPENNDS_AUTH_RETRIES=3
 ```
 
 ---

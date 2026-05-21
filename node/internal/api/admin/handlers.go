@@ -5,16 +5,23 @@ import (
 	"time"
 
 	"github.com/astrolink/node/internal/config"
+	"github.com/astrolink/node/internal/gateway"
 	"github.com/astrolink/node/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
 
 type Dependencies struct {
-	Config config.Config
-	Store  store.Store
+	Config  config.Config
+	Store   store.Store
+	Gateway gateway.Controller
 }
 
 func Register(app *fiber.App, deps Dependencies) {
+	gatewayController := deps.Gateway
+	if gatewayController == nil {
+		gatewayController = gateway.NoopController{}
+	}
+
 	app.Post("/admin/auth/login", func(c *fiber.Ctx) error {
 		var body struct {
 			Usuario string `json:"usuario"`
@@ -71,6 +78,13 @@ func Register(app *fiber.App, deps Dependencies) {
 			"limit":    50,
 			"usuarios": usuarios,
 		})
+	})
+
+	app.Post("/admin/usuarios/:mac/desconectar", func(c *fiber.Ctx) error {
+		if err := gatewayController.Deauthorize(c.UserContext(), c.Params("mac")); err != nil {
+			return adminError(c, fiber.StatusBadGateway, "roteador_indisponivel", "erro ao desconectar usuario no roteador")
+		}
+		return c.JSON(fiber.Map{"sucesso": true})
 	})
 }
 
