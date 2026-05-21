@@ -52,6 +52,8 @@ URLs locais:
 - `GET /admin/sistema/saude`
 - `GET /admin/planos`
 - `GET /admin/usuarios`
+- `GET /admin/vouchers`
+- `POST /admin/vouchers/gerar`
 - `POST /admin/usuarios/:mac/desconectar`
 
 ## Testes

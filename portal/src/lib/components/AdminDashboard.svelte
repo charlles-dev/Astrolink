@@ -1,20 +1,44 @@
 <script lang="ts">
   import { formatCurrency, formatCountdown } from '../format'
-  import type { AdminHealthResponse, AdminUser, Plano } from '../types'
+  import type {
+    AdminHealthResponse,
+    AdminUser,
+    AdminVoucher,
+    GenerateAdminVouchersBody,
+    Plano
+  } from '../types'
 
   export let health: AdminHealthResponse | null = null
   export let planos: Plano[] = []
   export let usuarios: AdminUser[] = []
+  export let vouchers: AdminVoucher[] = []
   export let loading = false
   export let actionMessage = ''
   export let onRefresh: () => void = () => {}
   export let onDisconnect: (mac: string) => void = () => {}
+  export let onGenerateVouchers: (input: GenerateAdminVouchersBody) => void = () => {}
   export let onLogout: () => void = () => {}
+
+  let voucherPlanoID = 0
+  let voucherQuantidade = 1
+  let voucherPrefixo = 'VIP'
 
   $: activeUsers = usuarios.filter((usuario) => usuario.status === 'ativo').length
   $: visiblePlans = planos.filter((plano) => plano.ativo).length
+  $: activeVouchers = vouchers.filter((voucher) => voucher.ativo).length
   $: routerOnline = health?.checks.roteadores.online ?? 0
   $: routerTotal = health?.checks.roteadores.total ?? 0
+  $: if (planos.length > 0 && !planos.some((plano) => plano.id === voucherPlanoID)) {
+    voucherPlanoID = planos[0].id
+  }
+
+  function submitVoucherForm() {
+    onGenerateVouchers({
+      plano_id: Number(voucherPlanoID),
+      quantidade: Number(voucherQuantidade),
+      prefixo: voucherPrefixo.trim().toUpperCase()
+    })
+  }
 </script>
 
 <section class="admin-dashboard" aria-busy={loading}>
@@ -47,14 +71,14 @@
       <small>{planos.length} cadastrados</small>
     </article>
     <article>
-      <span>Roteadores</span>
-      <strong>{routerOnline}/{routerTotal}</strong>
-      <small>online agora</small>
+      <span>Vouchers ativos</span>
+      <strong>{activeVouchers}</strong>
+      <small>{vouchers.length} emitidos</small>
     </article>
     <article>
       <span>Banco</span>
       <strong>{health?.checks.banco_dados.status ?? 'sem dados'}</strong>
-      <small>Banco {health?.checks.banco_dados.status ?? 'desconhecido'}</small>
+      <small>{routerOnline}/{routerTotal} roteador online</small>
     </article>
   </div>
 
@@ -84,7 +108,7 @@
                 <div>
                   <h3>{usuario.mac}</h3>
                   <p>
-                    {usuario.plano?.nome ?? 'Sem plano'} · {usuario.ip_atual ?? 'sem IP'} ·
+                    {usuario.plano?.nome ?? 'Sem plano'} - {usuario.ip_atual ?? 'sem IP'} -
                     {usuario.status}
                   </p>
                 </div>
@@ -108,30 +132,90 @@
       {/if}
     </section>
 
-    <aside class="plans-panel" aria-labelledby="planos-title">
-      <div class="section-heading">
-        <div>
-          <h2 id="planos-title">Planos</h2>
-          <p>Oferta atual do portal.</p>
-        </div>
-      </div>
-
-      <div class="plan-admin-list">
-        {#each planos as plano (plano.id)}
-          <article>
-            <div>
-              <h3>{plano.nome}</h3>
-              <p>{plano.duracao_formatada}</p>
-            </div>
-            <strong>{formatCurrency(plano.preco)}</strong>
-          </article>
-        {:else}
-          <div class="empty-state compact">
-            <h3>Nenhum plano</h3>
-            <p>Cadastre planos pelo backend nas proximas etapas.</p>
+    <aside class="side-stack">
+      <section class="plans-panel" aria-labelledby="planos-title">
+        <div class="section-heading">
+          <div>
+            <h2 id="planos-title">Planos</h2>
+            <p>Oferta atual do portal.</p>
           </div>
-        {/each}
-      </div>
+        </div>
+
+        <div class="plan-admin-list">
+          {#each planos as plano (plano.id)}
+            <article>
+              <div>
+                <h3>{plano.nome}</h3>
+                <p>{plano.duracao_formatada}</p>
+              </div>
+              <strong>{formatCurrency(plano.preco)}</strong>
+            </article>
+          {:else}
+            <div class="empty-state compact">
+              <h3>Nenhum plano</h3>
+              <p>Cadastre planos pelo backend nas proximas etapas.</p>
+            </div>
+          {/each}
+        </div>
+      </section>
+
+      <section class="vouchers-panel" aria-labelledby="vouchers-title">
+        <div class="section-heading">
+          <div>
+            <h2 id="vouchers-title">Vouchers</h2>
+            <p>Codigos para vender em dinheiro.</p>
+          </div>
+        </div>
+
+        <form
+          class="voucher-form"
+          onsubmit={(event) => {
+            event.preventDefault()
+            submitVoucherForm()
+          }}
+        >
+          <label>
+            Plano
+            <select bind:value={voucherPlanoID} disabled={loading || planos.length === 0}>
+              {#each planos as plano (plano.id)}
+                <option value={plano.id}>{plano.nome}</option>
+              {/each}
+            </select>
+          </label>
+          <div class="form-grid">
+            <label>
+              Prefixo
+              <input bind:value={voucherPrefixo} maxlength="6" autocomplete="off" />
+            </label>
+            <label>
+              Quantidade
+              <input bind:value={voucherQuantidade} min="1" max="200" type="number" />
+            </label>
+          </div>
+          <button type="submit" class="ink-button wide" disabled={loading || planos.length === 0}>
+            Gerar vouchers
+          </button>
+        </form>
+
+        <div class="voucher-list">
+          {#each vouchers.slice(0, 8) as voucher (voucher.id)}
+            <article>
+              <div>
+                <h3>{voucher.codigo}</h3>
+                <p>
+                  {voucher.plano.nome} - {voucher.usos_atuais}/{voucher.usos_maximos ?? 1} uso
+                </p>
+              </div>
+              <span class:inactive={!voucher.ativo}>{voucher.ativo ? 'ativo' : 'inativo'}</span>
+            </article>
+          {:else}
+            <div class="empty-state compact">
+              <h3>Nenhum voucher emitido</h3>
+              <p>Gere um lote para venda presencial.</p>
+            </div>
+          {/each}
+        </div>
+      </section>
     </aside>
   </div>
 </section>
@@ -149,7 +233,8 @@
   .section-heading,
   .user-main,
   .user-row,
-  .plan-admin-list article {
+  .plan-admin-list article,
+  .voucher-list article {
     display: flex;
     align-items: center;
   }
@@ -242,7 +327,8 @@
 
   .metric-grid article,
   .users-panel,
-  .plans-panel {
+  .plans-panel,
+  .vouchers-panel {
     border: 1px solid var(--color-line);
     border-radius: 8px;
     background: white;
@@ -292,8 +378,15 @@
   }
 
   .users-panel,
-  .plans-panel {
+  .plans-panel,
+  .vouchers-panel {
     padding: 18px;
+  }
+
+  .side-stack {
+    display: grid;
+    gap: 16px;
+    align-content: start;
   }
 
   .section-heading {
@@ -322,7 +415,8 @@
   }
 
   .user-list,
-  .plan-admin-list {
+  .plan-admin-list,
+  .voucher-list {
     display: grid;
     gap: 10px;
   }
@@ -387,7 +481,8 @@
     white-space: nowrap;
   }
 
-  .plan-admin-list article {
+  .plan-admin-list article,
+  .voucher-list article {
     justify-content: space-between;
     gap: 12px;
     border: 1px solid #e2e8f0;
@@ -400,6 +495,69 @@
     white-space: nowrap;
     font-size: 0.95rem;
     font-weight: 920;
+  }
+
+  .voucher-form {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .voucher-form label {
+    display: grid;
+    gap: 6px;
+    color: var(--color-ink);
+    font-size: 0.78rem;
+    font-weight: 850;
+  }
+
+  .voucher-form input,
+  .voucher-form select {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    padding: 0 11px;
+    background: #f8fafc;
+    color: var(--color-ink);
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 116px;
+    gap: 10px;
+  }
+
+  .wide {
+    width: 100%;
+  }
+
+  .voucher-list h3 {
+    margin: 0;
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    font-size: 0.92rem;
+    font-weight: 900;
+    letter-spacing: 0;
+  }
+
+  .voucher-list p {
+    margin-top: 4px;
+    color: var(--color-muted);
+    font-size: 0.8rem;
+  }
+
+  .voucher-list span {
+    border-radius: 999px;
+    padding: 6px 8px;
+    background: #dcfce7;
+    color: #166534;
+    font-size: 0.72rem;
+    font-weight: 900;
+  }
+
+  .voucher-list span.inactive {
+    background: #f1f5f9;
+    color: #64748b;
   }
 
   .empty-state {

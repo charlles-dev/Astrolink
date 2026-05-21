@@ -14,12 +14,14 @@ import (
 )
 
 type Store struct {
-	mu       sync.RWMutex
-	settings store.Settings
-	planos   []planos.Plano
-	vouchers map[string]vouchers.Voucher
-	usuarios map[string]store.Usuario
-	pix      map[string]store.PixTransaction
+	mu            sync.RWMutex
+	settings      store.Settings
+	planos        []planos.Plano
+	vouchers      map[string]vouchers.Voucher
+	usuarios      map[string]store.Usuario
+	pix           map[string]store.PixTransaction
+	nextVoucherID int
+	nextLoteID    int
 }
 
 func NewStore() *Store {
@@ -40,8 +42,10 @@ func NewStore() *Store {
 			"TEST-1234": {ID: 1, Codigo: "TEST-1234", PlanoID: 2, Tipo: vouchers.TipoSingleUse, Ativo: true, ValidadeEm: &expires},
 			"UNIV-0000": {ID: 2, Codigo: "UNIV-0000", PlanoID: 1, Tipo: vouchers.TipoUniversal, UsosMaximos: &maxUses, Ativo: true},
 		},
-		usuarios: map[string]store.Usuario{},
-		pix:      map[string]store.PixTransaction{},
+		usuarios:      map[string]store.Usuario{},
+		pix:           map[string]store.PixTransaction{},
+		nextVoucherID: 3,
+		nextLoteID:    1,
 	}
 }
 
@@ -192,6 +196,71 @@ func (s *Store) RedeemVoucher(_ context.Context, input store.RedeemVoucherInput)
 	}, nil
 }
 
+func (s *Store) AdminVouchers(_ context.Context) ([]store.AdminVoucher, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]store.AdminVoucher, 0, len(s.vouchers))
+	for _, voucher := range s.vouchers {
+		plano, err := s.findPlano(voucher.PlanoID)
+		if err != nil {
+			continue
+		}
+		result = append(result, adminVoucherFromDomain(voucher, plano, nil))
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ID > result[j].ID
+	})
+	return result, nil
+}
+
+func (s *Store) GenerateVouchers(_ context.Context, input store.GenerateVouchersInput) (store.GenerateVouchersResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if input.Quantidade < 1 || input.Quantidade > 200 {
+		return store.GenerateVouchersResult{}, store.ErrInvalidQuantity
+	}
+	plano, err := s.findPlano(input.PlanoID)
+	if err != nil {
+		return store.GenerateVouchersResult{}, err
+	}
+	tipo := vouchers.TipoSingleUse
+	if input.Tipo == string(vouchers.TipoUniversal) {
+		tipo = vouchers.TipoUniversal
+	}
+	var validadeEm *time.Time
+	if input.ValidadeDias != nil && *input.ValidadeDias > 0 {
+		expires := time.Now().UTC().Add(time.Duration(*input.ValidadeDias) * 24 * time.Hour)
+		validadeEm = &expires
+	}
+	loteID := s.nextLoteID
+	s.nextLoteID++
+	created := make([]store.AdminVoucher, 0, input.Quantidade)
+	for len(created) < input.Quantidade {
+		code := vouchers.GerarCodigo(input.Prefixo)
+		if _, exists := s.vouchers[code]; exists {
+			continue
+		}
+		voucher := vouchers.Voucher{
+			ID:          s.nextVoucherID,
+			Codigo:      code,
+			PlanoID:     plano.ID,
+			Tipo:        tipo,
+			UsosMaximos: input.UsosMaximos,
+			ValidadeEm:  validadeEm,
+			Ativo:       true,
+			Prefixo:     strings.ToUpper(strings.TrimSpace(input.Prefixo)),
+		}
+		s.nextVoucherID++
+		s.vouchers[code] = voucher
+		created = append(created, adminVoucherFromDomain(voucher, plano, &loteID))
+	}
+	return store.GenerateVouchersResult{
+		LoteID:     loteID,
+		Quantidade: len(created),
+		Vouchers:   created,
+	}, nil
+}
+
 func (s *Store) Health(context.Context) store.Health {
 	return store.Health{DatabaseStatus: "memory"}
 }
@@ -211,4 +280,19 @@ func normalizeMAC(mac string) string {
 		return "00:00:00:00:00:00"
 	}
 	return strings.ToUpper(mac)
+}
+
+func adminVoucherFromDomain(voucher vouchers.Voucher, plano planos.Plano, loteID *int) store.AdminVoucher {
+	return store.AdminVoucher{
+		ID:          voucher.ID,
+		Codigo:      voucher.Codigo,
+		Plano:       store.PlanoResumo{ID: plano.ID, Nome: plano.Nome},
+		Tipo:        string(voucher.Tipo),
+		UsosMaximos: voucher.UsosMaximos,
+		UsosAtuais:  voucher.UsosAtuais,
+		ValidadeEm:  voucher.ValidadeEm,
+		Ativo:       voucher.Ativo,
+		Prefixo:     voucher.Prefixo,
+		LoteID:      loteID,
+	}
 }

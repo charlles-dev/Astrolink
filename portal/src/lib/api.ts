@@ -3,7 +3,10 @@ import type {
   AdminHealthResponse,
   AdminLoginBody,
   AdminLoginResponse,
+  AdminVouchersResponse,
   AdminUsersResponse,
+  GenerateAdminVouchersBody,
+  GenerateAdminVouchersResponse,
   PixStatusResponse,
   PixTransaction,
   PlanosResponse,
@@ -86,7 +89,11 @@ export function createApiClient(baseURL = '') {
         `/admin/usuarios/${encodeURIComponent(mac)}/desconectar`,
         {},
         token
-      )
+      ),
+    getAdminVouchers: (token: string) =>
+      request<AdminVouchersResponse>('GET', '/admin/vouchers', undefined, token),
+    generateAdminVouchers: (token: string, body: GenerateAdminVouchersBody) =>
+      request<GenerateAdminVouchersResponse>('POST', '/admin/vouchers/gerar', body, token)
   }
 }
 

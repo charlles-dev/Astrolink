@@ -226,6 +226,66 @@ Lista todos os planos.
 
 Lista usuarios conhecidos.
 
+### `GET /admin/vouchers`
+
+Lista vouchers emitidos no no local.
+
+Resposta:
+
+```json
+{
+  "total": 2,
+  "vouchers": [
+    {
+      "id": 2,
+      "codigo": "UNIV-0000",
+      "plano": { "id": 1, "nome": "Acesso 1 Hora" },
+      "tipo": "universal",
+      "usos_maximos": 25,
+      "usos_atuais": 0,
+      "validade_em": null,
+      "ativo": true
+    }
+  ]
+}
+```
+
+### `POST /admin/vouchers/gerar`
+
+Gera um lote de vouchers.
+
+Body:
+
+```json
+{
+  "plano_id": 2,
+  "quantidade": 10,
+  "tipo": "single_use",
+  "prefixo": "VIP"
+}
+```
+
+Resposta `201`:
+
+```json
+{
+  "lote_id": 1,
+  "quantidade": 10,
+  "vouchers": [
+    {
+      "id": 3,
+      "codigo": "VIP-1234",
+      "plano": { "id": 2, "nome": "Acesso 24 Horas" },
+      "tipo": "single_use",
+      "usos_atuais": 0,
+      "ativo": true,
+      "prefixo": "VIP",
+      "lote_id": 1
+    }
+  ]
+}
+```
+
 ### `POST /admin/usuarios/:mac/desconectar`
 
 Desconecta o MAC no OpenNDS quando gateway real esta habilitado.
@@ -242,7 +302,7 @@ Resposta:
 
 - JWT real e middleware de autenticacao.
 - CRUD de planos.
-- Geracao e exportacao de vouchers.
+- Exportacao e impressao de vouchers.
 - Webhook real do Mercado Pago.
 - Relatorios de pagamento.
 - Backup/restore.

@@ -11,6 +11,7 @@ import (
 var (
 	ErrPlanoNotFound   = errors.New("plano nao encontrado")
 	ErrVoucherNotFound = errors.New("voucher nao encontrado")
+	ErrInvalidQuantity = errors.New("quantidade invalida")
 )
 
 type Store interface {
@@ -22,6 +23,8 @@ type Store interface {
 	CreatePix(context.Context, CreatePixInput) (PixTransaction, error)
 	PixStatus(context.Context, string) (PixTransaction, bool, error)
 	RedeemVoucher(context.Context, RedeemVoucherInput) (RedeemVoucherResult, error)
+	AdminVouchers(context.Context) ([]AdminVoucher, error)
+	GenerateVouchers(context.Context, GenerateVouchersInput) (GenerateVouchersResult, error)
 	Health(context.Context) Health
 }
 
@@ -105,6 +108,35 @@ type RedeemVoucherResult struct {
 	Usuario   Usuario
 	Plano     planos.Plano
 	HadAccess bool
+}
+
+type AdminVoucher struct {
+	ID          int         `json:"id"`
+	Codigo      string      `json:"codigo"`
+	Plano       PlanoResumo `json:"plano"`
+	Tipo        string      `json:"tipo"`
+	UsosMaximos *int        `json:"usos_maximos"`
+	UsosAtuais  int         `json:"usos_atuais"`
+	ValidadeEm  *time.Time  `json:"validade_em"`
+	Ativo       bool        `json:"ativo"`
+	Prefixo     string      `json:"prefixo,omitempty"`
+	LoteID      *int        `json:"lote_id,omitempty"`
+	CreatedAt   time.Time   `json:"created_at,omitempty"`
+}
+
+type GenerateVouchersInput struct {
+	PlanoID      int
+	Quantidade   int
+	Tipo         string
+	UsosMaximos  *int
+	ValidadeDias *int
+	Prefixo      string
+}
+
+type GenerateVouchersResult struct {
+	LoteID     int            `json:"lote_id"`
+	Quantidade int            `json:"quantidade"`
+	Vouchers   []AdminVoucher `json:"vouchers"`
 }
 
 type Health struct {

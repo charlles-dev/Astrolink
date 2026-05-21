@@ -120,6 +120,14 @@ func (f fakeStore) AdminPlanos(context.Context) ([]planos.Plano, error) {
 	return nil, nil
 }
 
+func (f fakeStore) AdminVouchers(context.Context) ([]store.AdminVoucher, error) {
+	return nil, nil
+}
+
+func (f fakeStore) GenerateVouchers(context.Context, store.GenerateVouchersInput) (store.GenerateVouchersResult, error) {
+	return store.GenerateVouchersResult{}, nil
+}
+
 func (f fakeStore) Usuarios(context.Context) ([]store.Usuario, error) {
 	return nil, nil
 }

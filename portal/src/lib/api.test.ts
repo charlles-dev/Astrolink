@@ -111,4 +111,51 @@ describe('createApiClient', () => {
       })
     )
   })
+
+  it('loads admin vouchers with bearer token', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ vouchers: [{ id: 1, codigo: 'VIPA-1234' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+    )
+
+    const api = createApiClient('')
+    const result = await api.getAdminVouchers('token-123')
+
+    expect(result.vouchers[0].codigo).toBe('VIPA-1234')
+    expect(fetch).toHaveBeenCalledWith(
+      '/admin/vouchers',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+  })
+
+  it('generates admin vouchers', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ lote_id: 1, quantidade: 2, vouchers: [] }), {
+          status: 201,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+    )
+
+    const api = createApiClient('')
+    await api.generateAdminVouchers('token-123', { plano_id: 2, quantidade: 2, prefixo: 'VIPA' })
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/admin/vouchers/gerar',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' }),
+        body: JSON.stringify({ plano_id: 2, quantidade: 2, prefixo: 'VIPA' })
+      })
+    )
+  })
 })

@@ -146,3 +146,40 @@ export interface AdminUsersResponse {
   limit: number
   usuarios: AdminUser[]
 }
+
+export interface AdminVoucher {
+  id: number
+  codigo: string
+  plano: {
+    id: number
+    nome: string
+  }
+  tipo: string
+  usos_maximos?: number | null
+  usos_atuais: number
+  validade_em?: string | null
+  ativo: boolean
+  prefixo?: string
+  lote_id?: number
+  created_at?: string
+}
+
+export interface AdminVouchersResponse {
+  total: number
+  vouchers: AdminVoucher[]
+}
+
+export interface GenerateAdminVouchersBody {
+  plano_id: number
+  quantidade: number
+  tipo?: string
+  usos_maximos?: number | null
+  validade_dias?: number | null
+  prefixo?: string
+}
+
+export interface GenerateAdminVouchersResponse {
+  lote_id: number
+  quantidade: number
+  vouchers: AdminVoucher[]
+}

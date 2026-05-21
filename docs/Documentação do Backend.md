@@ -45,6 +45,8 @@ node/
 - `GET /admin/sistema/saude`
 - `GET /admin/planos`
 - `GET /admin/usuarios`
+- `GET /admin/vouchers`
+- `POST /admin/vouchers/gerar`
 - `POST /admin/usuarios/:mac/desconectar`
 
 ## Configuracao
@@ -81,7 +83,8 @@ por SSH no roteador configurado.
 ## Proximas Pendencias do Backend
 
 - JWT real no admin.
-- CRUD completo de planos e vouchers.
+- CRUD completo de planos.
+- Exportacao e impressao de vouchers.
 - Webhook real do Mercado Pago.
 - Job de expiracao de sessoes.
 - Logs de auditoria.

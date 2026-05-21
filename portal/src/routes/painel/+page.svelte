@@ -7,6 +7,8 @@
     AdminHealthResponse,
     AdminLoginResponse,
     AdminUser,
+    AdminVoucher,
+    GenerateAdminVouchersBody,
     Plano
   } from '$lib/types'
 
@@ -18,6 +20,7 @@
   let health: AdminHealthResponse | null = null
   let planos: Plano[] = []
   let usuarios: AdminUser[] = []
+  let vouchers: AdminVoucher[] = []
   let loading = false
   let loginLoading = false
   let loginError = ''
@@ -51,14 +54,16 @@
     loading = true
     actionMessage = ''
     try {
-      const [nextHealth, nextPlanos, nextUsuarios] = await Promise.all([
+      const [nextHealth, nextPlanos, nextUsuarios, nextVouchers] = await Promise.all([
         api.getAdminHealth(token),
         api.getAdminPlanos(token),
-        api.getAdminUsuarios(token)
+        api.getAdminUsuarios(token),
+        api.getAdminVouchers(token)
       ])
       health = nextHealth
       planos = nextPlanos.planos
       usuarios = nextUsuarios.usuarios
+      vouchers = nextVouchers.vouchers
     } catch (error) {
       actionMessage = messageFromError(error, 'Nao foi possivel carregar o painel')
     } finally {
@@ -81,12 +86,31 @@
     }
   }
 
+  async function generateVouchers(input: GenerateAdminVouchersBody) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      const result = await api.generateAdminVouchers(token, input)
+      vouchers = [...result.vouchers, ...vouchers]
+      actionMessage =
+        result.quantidade === 1
+          ? '1 voucher gerado'
+          : `${result.quantidade} vouchers gerados`
+    } catch (error) {
+      actionMessage = messageFromError(error, 'Nao foi possivel gerar vouchers')
+    } finally {
+      loading = false
+    }
+  }
+
   function logout() {
     sessionStorage.removeItem(TOKEN_KEY)
     token = ''
     health = null
     planos = []
     usuarios = []
+    vouchers = []
     actionMessage = ''
   }
 
@@ -102,10 +126,12 @@
     {health}
     {planos}
     {usuarios}
+    {vouchers}
     {loading}
     {actionMessage}
     onRefresh={loadDashboard}
     onDisconnect={disconnect}
+    onGenerateVouchers={generateVouchers}
     onLogout={logout}
   />
 {:else}

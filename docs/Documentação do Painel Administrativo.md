@@ -64,6 +64,24 @@ Lista ate 200 usuarios conhecidos pelo no local.
 
 Chama o gateway OpenNDS para executar `ndsctl deauth <mac>` quando habilitado.
 
+### Vouchers
+
+`GET /admin/vouchers`
+
+Lista os vouchers emitidos, com plano, uso atual, validade, status e lote.
+
+`POST /admin/vouchers/gerar`
+
+Gera um lote de vouchers para venda presencial.
+
+```json
+{
+  "plano_id": 2,
+  "quantidade": 10,
+  "prefixo": "VIP"
+}
+```
+
 ## Tela Implementada
 
 O painel local inicial cobre:
@@ -73,13 +91,14 @@ O painel local inicial cobre:
 - tabela de usuarios
 - botao de desconectar usuario
 - lista de planos
+- geracao e listagem de vouchers
 
 ## Proxima Etapa Recomendada
 
 Evoluir o admin local com:
 
-- geracao/listagem de vouchers
 - CRUD de planos
+- exportacao/impressao de vouchers
 - status real do roteador
 - autenticacao JWT real
 - logs de auditoria

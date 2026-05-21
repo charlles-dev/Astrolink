@@ -263,6 +263,110 @@ func (s *Store) RedeemVoucher(ctx context.Context, input store.RedeemVoucherInpu
 	}, nil
 }
 
+func (s *Store) AdminVouchers(ctx context.Context) ([]store.AdminVoucher, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			v.id, v.codigo, v.tipo, v.usos_maximos, v.usos_atuais, v.validade_em,
+			v.ativo, COALESCE(v.prefixo, ''), v.lote_id, v.created_at,
+			p.id, p.nome
+		FROM vouchers v
+		JOIN planos p ON p.id = v.plano_id
+		ORDER BY v.created_at DESC, v.id DESC
+		LIMIT 200`)
+	if err != nil {
+		return nil, fmt.Errorf("buscar vouchers: %w", err)
+	}
+	defer rows.Close()
+
+	var result []store.AdminVoucher
+	for rows.Next() {
+		voucher, err := scanAdminVoucher(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, voucher)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterar vouchers: %w", err)
+	}
+	return result, nil
+}
+
+func (s *Store) GenerateVouchers(ctx context.Context, input store.GenerateVouchersInput) (store.GenerateVouchersResult, error) {
+	if input.Quantidade < 1 || input.Quantidade > 200 {
+		return store.GenerateVouchersResult{}, store.ErrInvalidQuantity
+	}
+	plano, err := s.findPlano(ctx, input.PlanoID)
+	if err != nil {
+		return store.GenerateVouchersResult{}, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.GenerateVouchersResult{}, fmt.Errorf("iniciar transacao gerar vouchers: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := s.clock().UTC()
+	var loteID int
+	err = tx.QueryRowContext(ctx, `
+		INSERT INTO voucher_lotes (quantidade, plano_id, criado_por, created_at)
+		VALUES ($1, $2, 'admin', $3)
+		RETURNING id`, input.Quantidade, input.PlanoID, now).Scan(&loteID)
+	if err != nil {
+		return store.GenerateVouchersResult{}, fmt.Errorf("criar lote de vouchers: %w", err)
+	}
+
+	tipo := string(vouchers.TipoSingleUse)
+	if input.Tipo == string(vouchers.TipoUniversal) {
+		tipo = string(vouchers.TipoUniversal)
+	}
+	var validadeEm *time.Time
+	if input.ValidadeDias != nil && *input.ValidadeDias > 0 {
+		expires := now.Add(time.Duration(*input.ValidadeDias) * 24 * time.Hour)
+		validadeEm = &expires
+	}
+	prefixo := strings.ToUpper(strings.TrimSpace(input.Prefixo))
+	created := make([]store.AdminVoucher, 0, input.Quantidade)
+	for attempts := 0; len(created) < input.Quantidade && attempts < input.Quantidade*10; attempts++ {
+		code := vouchers.GerarCodigo(prefixo)
+		var id int
+		err := tx.QueryRowContext(ctx, `
+			INSERT INTO vouchers (codigo, plano_id, tipo, usos_maximos, validade_em, ativo, prefixo, lote_id, created_at)
+			VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8)
+			ON CONFLICT (codigo) DO NOTHING
+			RETURNING id`, code, input.PlanoID, tipo, input.UsosMaximos, validadeEm, prefixo, loteID, now).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return store.GenerateVouchersResult{}, fmt.Errorf("criar voucher: %w", err)
+		}
+		created = append(created, store.AdminVoucher{
+			ID:          id,
+			Codigo:      code,
+			Plano:       store.PlanoResumo{ID: plano.ID, Nome: plano.Nome},
+			Tipo:        tipo,
+			UsosMaximos: input.UsosMaximos,
+			ValidadeEm:  validadeEm,
+			Ativo:       true,
+			Prefixo:     prefixo,
+			LoteID:      &loteID,
+			CreatedAt:   now,
+		})
+	}
+	if len(created) != input.Quantidade {
+		return store.GenerateVouchersResult{}, fmt.Errorf("gerar quantidade solicitada: criados %d de %d", len(created), input.Quantidade)
+	}
+	if err := tx.Commit(); err != nil {
+		return store.GenerateVouchersResult{}, fmt.Errorf("commit gerar vouchers: %w", err)
+	}
+	return store.GenerateVouchersResult{
+		LoteID:     loteID,
+		Quantidade: len(created),
+		Vouchers:   created,
+	}, nil
+}
+
 func (s *Store) Health(ctx context.Context) store.Health {
 	start := time.Now()
 	err := s.db.PingContext(ctx)
@@ -459,6 +563,43 @@ func scanUsuario(row scanner, now time.Time) (store.Usuario, error) {
 		usuario.Roteador = &store.RoteadorResumo{ID: int(routerID.Int64), Nome: router.String}
 	}
 	return usuario, nil
+}
+
+func scanAdminVoucher(row scanner) (store.AdminVoucher, error) {
+	var (
+		voucher    store.AdminVoucher
+		usosMax    sql.NullInt64
+		validadeEm sql.NullTime
+		loteID     sql.NullInt64
+	)
+	if err := row.Scan(
+		&voucher.ID,
+		&voucher.Codigo,
+		&voucher.Tipo,
+		&usosMax,
+		&voucher.UsosAtuais,
+		&validadeEm,
+		&voucher.Ativo,
+		&voucher.Prefixo,
+		&loteID,
+		&voucher.CreatedAt,
+		&voucher.Plano.ID,
+		&voucher.Plano.Nome,
+	); err != nil {
+		return store.AdminVoucher{}, err
+	}
+	if usosMax.Valid {
+		value := int(usosMax.Int64)
+		voucher.UsosMaximos = &value
+	}
+	if validadeEm.Valid {
+		voucher.ValidadeEm = &validadeEm.Time
+	}
+	if loteID.Valid {
+		value := int(loteID.Int64)
+		voucher.LoteID = &value
+	}
+	return voucher, nil
 }
 
 func applySettings(settings *store.Settings, values map[string]string) {

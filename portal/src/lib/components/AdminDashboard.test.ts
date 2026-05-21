@@ -35,6 +35,16 @@ describe('AdminDashboard', () => {
             ordem: 1
           }
         ],
+        vouchers: [
+          {
+            id: 1,
+            codigo: 'VIPA-1234',
+            plano: { id: 1, nome: 'Acesso 24 Horas' },
+            tipo: 'single_use',
+            usos_atuais: 0,
+            ativo: true
+          }
+        ],
         usuarios: [
           {
             id: 1,
@@ -50,14 +60,17 @@ describe('AdminDashboard', () => {
         actionMessage: '',
         onRefresh: vi.fn(),
         onDisconnect: vi.fn(),
+        onGenerateVouchers: vi.fn(),
         onLogout: vi.fn()
       }
     })
 
     expect(screen.getByRole('heading', { name: 'Painel local' })).toBeInTheDocument()
-    expect(screen.getByText('Banco memory')).toBeInTheDocument()
-    expect(screen.getByText('Acesso 24 Horas')).toBeInTheDocument()
+    expect(screen.getByText('Banco')).toBeInTheDocument()
+    expect(screen.getByText('memory')).toBeInTheDocument()
+    expect(screen.getAllByText('Acesso 24 Horas').length).toBeGreaterThan(0)
     expect(screen.getByText('AA:BB:CC:DD:EE:FF')).toBeInTheDocument()
+    expect(screen.getByText('VIPA-1234')).toBeInTheDocument()
   })
 
   it('requests user disconnect from the row action', async () => {
@@ -67,6 +80,7 @@ describe('AdminDashboard', () => {
       props: {
         health: null,
         planos: [],
+        vouchers: [],
         usuarios: [
           {
             id: 1,
@@ -80,6 +94,7 @@ describe('AdminDashboard', () => {
         actionMessage: '',
         onRefresh: vi.fn(),
         onDisconnect,
+        onGenerateVouchers: vi.fn(),
         onLogout: vi.fn()
       }
     })
@@ -87,5 +102,49 @@ describe('AdminDashboard', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Desconectar AA:BB:CC:DD:EE:FF' }))
 
     expect(onDisconnect).toHaveBeenCalledWith('AA:BB:CC:DD:EE:FF')
+  })
+
+  it('submits voucher generation form', async () => {
+    const onGenerateVouchers = vi.fn()
+
+    render(AdminDashboard, {
+      props: {
+        health: null,
+        planos: [
+          {
+            id: 2,
+            nome: 'Acesso 24 Horas',
+            preco: '15.00',
+            duracao_minutos: 1440,
+            duracao_formatada: '24 horas',
+            dados_mb: null,
+            velocidade_down: 10,
+            velocidade_up: 5,
+            recomendado: true,
+            ativo: true,
+            visivel_portal: true,
+            ordem: 1
+          }
+        ],
+        vouchers: [],
+        usuarios: [],
+        loading: false,
+        actionMessage: '',
+        onRefresh: vi.fn(),
+        onDisconnect: vi.fn(),
+        onGenerateVouchers,
+        onLogout: vi.fn()
+      }
+    })
+
+    await fireEvent.input(screen.getByLabelText('Prefixo'), { target: { value: 'BARCO' } })
+    await fireEvent.input(screen.getByLabelText('Quantidade'), { target: { value: '3' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Gerar vouchers' }))
+
+    expect(onGenerateVouchers).toHaveBeenCalledWith({
+      plano_id: 2,
+      quantidade: 3,
+      prefixo: 'BARCO'
+    })
   })
 })
