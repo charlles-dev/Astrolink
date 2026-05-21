@@ -1,21 +1,20 @@
 # Astrolink
 
-Astrolink e um ecossistema para vender e gerenciar acesso Wi-Fi em areas remotas usando Starlink, OpenWrt/OpenNDS, PIX e vouchers.
+Astrolink vende e gerencia acesso Wi-Fi em redes locais usando Starlink, OpenWrt/OpenNDS, PIX e vouchers.
 
-Esta branch esta em reconstrução para seguir a documentacao em `docs/`. A nova base do produto e:
+Esta base foi limpa para manter apenas o novo stack:
 
-- `node/`: backend local em Go, responsavel pelo portal cativo, painel admin, vouchers, pagamentos, OpenNDS, jobs e sync.
-- `docs/`: specs, referencia de API, schema, infraestrutura, negocio e guias de desenvolvimento.
-- `docker-compose.dev.yml`: Postgres, Redis, RabbitMQ e pgAdmin para desenvolvimento.
+- `node/`: backend local em Go para portal cativo, vouchers, pagamentos, admin local inicial e OpenNDS.
+- `portal/`: portal cativo SvelteKit consumindo o backend Go.
+- `docs/`: especificacoes, referencia tecnica e guias de desenvolvimento.
+- `docker-compose.dev.yml`: infraestrutura local de desenvolvimento.
 
-As pastas antigas `backend/`, `app/`, `admin-app/`, `cloud-app/` e `web/` ainda existem como legado enquanto a migracao e feita em fases. Elas nao sao mais a fonte de verdade arquitetural.
-
-## Setup local
+## Setup Local
 
 Pre-requisitos:
 
 - Go 1.22+
-- Node.js 20+ e pnpm 9+ para a proxima fase dos frontends
+- Node.js 20+
 - Docker + Compose
 - Make
 
@@ -24,16 +23,21 @@ Copy-Item .env.example .env
 make install
 make dev-infra
 make test
-make dev
 ```
 
-Servidor local:
+Em terminais separados:
 
-```text
-http://localhost:5000
+```powershell
+make dev-node
+make dev-portal
 ```
 
-Endpoints iniciais:
+URLs locais:
+
+- Backend Go: `http://localhost:5000`
+- Portal cativo: `http://127.0.0.1:5173/?mac=AA:BB:CC:DD:EE:FF&ip=192.168.1.50&token=test`
+
+## Endpoints Iniciais
 
 - `GET /api/saude`
 - `GET /api/settings`
@@ -47,11 +51,26 @@ Endpoints iniciais:
 - `GET /admin/sistema/saude`
 - `GET /admin/planos`
 - `GET /admin/usuarios`
+- `POST /admin/usuarios/:mac/desconectar`
 
 ## Testes
 
 ```powershell
 make test
+make build
+```
+
+## OpenNDS
+
+OpenNDS fica desabilitado por padrao no desenvolvimento local. Para testar em roteador real, configure no `.env`:
+
+```env
+OPENNDS_ENABLED=true
+OPENNDS_SSH_HOST=192.168.1.1
+OPENNDS_SSH_PORT=22
+OPENNDS_SSH_USER=root
+OPENNDS_SSH_KEY_PATH=C:\Users\charl\.ssh\id_ed25519
+OPENNDS_AUTH_RETRIES=3
 ```
 
 ## Documentacao
@@ -61,14 +80,7 @@ Comece por:
 - `docs/README.md`
 - `docs/specs/portal-cativo.md`
 - `docs/specs/admin-local.md`
+- `docs/technical/openwrt-integration.md`
 - `docs/technical/api-reference.md`
 - `docs/technical/database-schema.md`
 - `docs/dev/setup-local.md`
-
-## Proximas fases
-
-1. Endurecer a camada Postgres com mais testes de integracao e migrations incrementais.
-2. Implementar auth JWT real, refresh token e rate limiting.
-3. Criar `portal/` e `admin/` em SvelteKit conforme as specs.
-4. Integrar Mercado Pago, OpenNDS, Redis, RabbitMQ e jobs.
-5. Remover definitivamente o legado Python/React quando a nova base cobrir os fluxos principais.

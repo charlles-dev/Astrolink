@@ -17,24 +17,10 @@ out/
 build/
 dist/
 
-app/dist/
-app/dist-ssr/
-admin-app/dist/
-admin-app/dist-ssr/
-cloud-app/dist/
-cloud-app/dist-ssr/
-web/.next/
-web/out/
-web/build/
-
 portal/.svelte-kit/
 portal/build/
-admin/.svelte-kit/
-admin/build/
-cloud/.svelte-kit/
-cloud/build/
 
-# Python legacy
+# Python/cache artifacts
 __pycache__/
 *.py[cod]
 *$py.class
@@ -52,17 +38,12 @@ __pycache__/
 env/
 venv/
 ENV/
-backend/.env
-backend/venv/
 
 # Databases, runtime data, logs and backups
 *.db
 *.sqlite
 *.sqlite3
 cloud_mock_db.sqlite
-backend/db/*.db
-backend/db/backups/
-backend/logs/
 data/
 *.log
 *.sql.gz

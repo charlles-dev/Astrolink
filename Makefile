@@ -1,31 +1,47 @@
-.PHONY: install dev dev-infra stop migrate test build lint clean
+.PHONY: install dev-node dev-portal dev-infra stop test test-node test-portal check build build-node build-portal lint clean
 
 install:
 	cd node && go mod download
+	cd portal && npm install
 
 dev-infra:
 	docker compose -f docker-compose.dev.yml up -d
 
-dev:
+dev-node:
 	cd node && go run ./cmd/server
+
+dev-portal:
+	cd portal && npm run dev -- --port 5173
 
 stop:
 	docker compose -f docker-compose.dev.yml down
 
-migrate:
-	@echo "Migrations are mounted into Postgres on first dev database startup."
-	@echo "Use golang-migrate or psql for incremental migration execution in the next phase."
+test: test-node test-portal
 
-test:
+test-node:
 	cd node && go test ./...
 
-build:
+test-portal:
+	cd portal && npm test
+
+check:
+	cd portal && npm run check
+
+build: build-node build-portal
+
+build-node:
 	New-Item -ItemType Directory -Force -Path node/dist
 	cd node && go build -o dist/astrolink-node ./cmd/server
+
+build-portal:
+	cd portal && npm run build
 
 lint:
 	cd node && gofmt -w .
 	cd node && go test ./...
+	cd portal && npm run check
 
 clean:
 	Remove-Item -Recurse -Force node/dist -ErrorAction SilentlyContinue
+	Remove-Item -Recurse -Force portal/.svelte-kit -ErrorAction SilentlyContinue
+	Remove-Item -Recurse -Force portal/build -ErrorAction SilentlyContinue
