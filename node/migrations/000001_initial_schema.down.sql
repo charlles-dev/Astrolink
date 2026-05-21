@@ -1,0 +1,12 @@
+DROP TABLE IF EXISTS sessoes_admin;
+DROP TABLE IF EXISTS logs;
+DROP TABLE IF EXISTS system_settings;
+DROP TABLE IF EXISTS walled_garden;
+DROP TABLE IF EXISTS blacklist_mac;
+DROP TABLE IF EXISTS voucher_usos;
+DROP TABLE IF EXISTS vouchers;
+DROP TABLE IF EXISTS voucher_lotes;
+DROP TABLE IF EXISTS transacoes_pix;
+DROP TABLE IF EXISTS usuarios_mac;
+DROP TABLE IF EXISTS roteadores;
+DROP TABLE IF EXISTS planos;
