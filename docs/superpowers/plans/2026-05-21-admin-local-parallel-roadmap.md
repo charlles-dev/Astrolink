@@ -15,7 +15,7 @@
 Implemented:
 - Captive portal settings, plans, session status, PIX demo, voucher redeem.
 - OpenNDS controller with no-op and SSH-backed auth/deauth.
-- Admin local login with temporary token.
+- Admin local login with JWT access token, refresh token, and local lockout.
 - Admin health, plans list, users list, vouchers list/generate, disconnect user.
 - Portal `/painel` UI for health, users, plans, and voucher generation.
 - Wave 0 split completed in commit `782d5bd`: admin backend handlers are separated by domain, and the admin dashboard is split into panel components under `portal/src/lib/components/admin/`.
@@ -23,6 +23,7 @@ Implemented:
 - Wave 2 reporting/reliability completed: admin payment history with CSV export, demo payments provider abstraction, operational logs with CSV export, backup endpoint disabled in memory/dev, and a session-expiration job hook.
 - Wave 3A polish completed: printable voucher sheet from `/painel`, Mercado Pago webhook signature validation with provider status reconciliation hook, development-only PIX approval endpoint, and protected restore validation that never executes destructive restore.
 - Wave 3B live operations completed: protected admin SSE snapshots, live events panel on `/painel`, and best-effort audit logs for mutating local admin actions.
+- Wave 3C hardening completed: Mercado Pago payment-detail provider, PDF-ready voucher sheet, and 5-failure local admin login lockout.
 
 Out of scope for this roadmap:
 - Admin cloud.
@@ -322,11 +323,27 @@ Run after local admin is operational:
 - [x] Mercado Pago webhook validation and reconciliation hook.
 - [x] Development-only PIX approval endpoint behind `GO_ENV=development`.
 - [x] Backup restore explicit confirmation workflow, implemented as safe validation only.
-- [ ] Real Mercado Pago provider client for payment detail fetches.
-- [ ] Highly designed PDF voucher export.
+- [x] Real Mercado Pago provider client for payment detail fetches.
+- [x] Highly designed PDF voucher export.
 - [x] Admin SSE event stream with live local dashboard snapshot.
 - [x] Best-effort local audit logs for mutating admin actions.
 - [ ] Optional 2FA.
+
+### Wave 3C: Current Parallel Dispatch
+
+Run after commit `26c2404`:
+
+- [x] Agent Mercado Pago Provider owned `internal/payments`, payment config, and `api.NewServer` provider construction.
+- [x] Agent Voucher PDF owned the PDF/impression voucher sheet and focused Svelte component tests.
+- [x] Agent Admin Login Lockout owned optional lockout store capability, memory/Postgres persistence, migration, and admin auth tests.
+- [x] Coordinator added default HTTP timeout for Mercado Pago, updated env/docs, and ran full verification.
+
+Wave 3C verification:
+- `go test ./...` in `node`
+- `npm test`, `npm run check`, and `npm run build` in `portal`
+- `git diff --check`
+- Local API verification: five invalid admin logins return `429 login_bloqueado`; valid login still returns JWT/refresh token.
+- Browser DOM verification on `http://127.0.0.1:5173/painel`: voucher export button reads `Gerar folha PDF`, print sheet renders summary and customer instructions.
 
 ### Wave 3A: Current Parallel Dispatch
 
@@ -362,4 +379,4 @@ Wave 3B verification:
 
 ## Recommended Next Concrete Step
 
-Move to the next Wave 3 slice after committing Wave 3B. The strongest remaining local slice is either the real Mercado Pago provider client or optional 2FA for the local admin.
+Move to the next Wave 3 slice after committing Wave 3C. The strongest remaining local slice is optional 2FA for the local admin or real PIX creation through Mercado Pago.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -348,6 +349,40 @@ func TestLogin_RetornaJWTAssinadoERefreshOpaco(t *testing.T) {
 	}
 }
 
+func TestLogin_BloqueiaAposCincoFalhasRecentes(t *testing.T) {
+	app := fiber.New()
+	repo := &fakeStore{}
+	admin.Register(app, admin.Dependencies{
+		Config:  testConfig(),
+		Store:   repo,
+		Gateway: &fakeGateway{},
+	})
+
+	for i := 0; i < 4; i++ {
+		resp := postAdminLogin(t, app, `{"usuario":"admin","senha":"errada"}`)
+		if resp.StatusCode != 401 {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			t.Fatalf("falha %d status = %d body=%s, want 401", i+1, resp.StatusCode, string(body))
+		}
+		resp.Body.Close()
+	}
+
+	resp := postAdminLogin(t, app, `{"usuario":"admin","senha":"errada"}`)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != 429 {
+		t.Fatalf("quinta falha status = %d body=%s, want 429", resp.StatusCode, string(body))
+	}
+	if len(repo.createdSessions) != 0 {
+		t.Fatalf("sessoes criadas = %d, want 0", len(repo.createdSessions))
+	}
+	if !strings.Contains(string(body), "login bloqueado") {
+		t.Fatalf("erro de lockout pouco claro: %s", string(body))
+	}
+}
+
 func TestAdminRotasProtegidas_ExigemBearerToken(t *testing.T) {
 	app := fiber.New()
 	admin.Register(app, admin.Dependencies{
@@ -488,6 +523,7 @@ type fakeStore struct {
 	createdSessions           []store.CreateAdminSessionInput
 	rotatedRefreshTokenHashes []string
 	revokedRefreshTokenHashes []string
+	loginFailures             map[string][]time.Time
 	sessions                  map[string]store.AdminSession
 }
 
@@ -586,10 +622,52 @@ func (f *fakeStore) RevokeAdminSession(_ context.Context, refreshTokenHash strin
 	return nil
 }
 
+func (f *fakeStore) AdminLoginLocked(_ context.Context, query store.AdminLoginLockoutQuery) (bool, error) {
+	key := adminLoginFailureKey(query.Identity)
+	failures := f.recentLoginFailures(key, query.Since)
+	f.loginFailures[key] = failures
+	return len(failures) >= query.Limit, nil
+}
+
+func (f *fakeStore) RecordAdminLoginFailure(_ context.Context, input store.AdminLoginFailureInput) (store.AdminLoginFailureStatus, error) {
+	key := adminLoginFailureKey(input.Identity)
+	failures := f.recentLoginFailures(key, input.At.Add(-input.Window))
+	failures = append(failures, input.At)
+	f.loginFailures[key] = failures
+	return store.AdminLoginFailureStatus{Failures: len(failures), Locked: len(failures) >= input.Limit}, nil
+}
+
+func (f *fakeStore) ClearAdminLoginFailures(_ context.Context, identity store.AdminLoginIdentity) error {
+	f.ensureLoginFailures()
+	delete(f.loginFailures, adminLoginFailureKey(identity))
+	return nil
+}
+
 func (f *fakeStore) ensureSessions() {
 	if f.sessions == nil {
 		f.sessions = map[string]store.AdminSession{}
 	}
+}
+
+func (f *fakeStore) recentLoginFailures(key string, since time.Time) []time.Time {
+	f.ensureLoginFailures()
+	recent := make([]time.Time, 0, len(f.loginFailures[key]))
+	for _, failure := range f.loginFailures[key] {
+		if !failure.Before(since) {
+			recent = append(recent, failure)
+		}
+	}
+	return recent
+}
+
+func (f *fakeStore) ensureLoginFailures() {
+	if f.loginFailures == nil {
+		f.loginFailures = map[string][]time.Time{}
+	}
+}
+
+func adminLoginFailureKey(identity store.AdminLoginIdentity) string {
+	return strings.ToLower(strings.TrimSpace(identity.Usuario)) + "|" + strings.TrimSpace(identity.IP)
 }
 
 type fakeGateway struct {
@@ -628,12 +706,7 @@ func testConfig() config.Config {
 
 func loginAdmin(t *testing.T, app *fiber.App) authResponse {
 	t.Helper()
-	req := httptest.NewRequest("POST", "/admin/auth/login", strings.NewReader(`{"usuario":"admin","senha":"admin123"}`))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := postAdminLogin(t, app, `{"usuario":"admin","senha":"admin123"}`)
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
@@ -644,6 +717,17 @@ func loginAdmin(t *testing.T, app *fiber.App) authResponse {
 		t.Fatal(err)
 	}
 	return tokens
+}
+
+func postAdminLogin(t *testing.T, app *fiber.App, body string) *http.Response {
+	t.Helper()
+	req := httptest.NewRequest("POST", "/admin/auth/login", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp
 }
 
 func strconvQuote(value string) string {

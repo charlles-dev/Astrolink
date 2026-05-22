@@ -219,7 +219,7 @@
         onclick={printSheet}
         disabled={loading || vouchers.length === 0}
       >
-        Imprimir folha
+        Gerar folha PDF
       </button>
     </div>
   </form>

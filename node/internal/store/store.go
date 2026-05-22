@@ -45,6 +45,12 @@ type AdminAuthStore interface {
 	RevokeAdminSession(context.Context, string) error
 }
 
+type AdminLoginLockoutStore interface {
+	AdminLoginLocked(context.Context, AdminLoginLockoutQuery) (bool, error)
+	RecordAdminLoginFailure(context.Context, AdminLoginFailureInput) (AdminLoginFailureStatus, error)
+	ClearAdminLoginFailures(context.Context, AdminLoginIdentity) error
+}
+
 type AdminPlanosStore interface {
 	CreateAdminPlano(context.Context, AdminPlanoInput) (planos.Plano, error)
 	UpdateAdminPlano(context.Context, int, AdminPlanoInput) (planos.Plano, error)
@@ -275,6 +281,29 @@ type RotateAdminSessionInput struct {
 	UserAgent               string
 	ExpiresAt               time.Time
 	Now                     time.Time
+}
+
+type AdminLoginIdentity struct {
+	Usuario string
+	IP      string
+}
+
+type AdminLoginLockoutQuery struct {
+	Identity AdminLoginIdentity
+	Since    time.Time
+	Limit    int
+}
+
+type AdminLoginFailureInput struct {
+	Identity AdminLoginIdentity
+	At       time.Time
+	Window   time.Duration
+	Limit    int
+}
+
+type AdminLoginFailureStatus struct {
+	Failures int
+	Locked   bool
 }
 
 type Health struct {

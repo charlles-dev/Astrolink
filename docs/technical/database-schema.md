@@ -4,6 +4,7 @@ O banco local usa PostgreSQL. A migration atual esta em:
 
 ```text
 node/migrations/000001_initial_schema.up.sql
+node/migrations/000002_admin_login_failures.up.sql
 ```
 
 Admin cloud e multi-tenancy estao pausados nesta fase; este documento cobre
@@ -24,6 +25,7 @@ blacklist_mac
 walled_garden
 logs
 sessoes_admin
+admin_login_failures
 ```
 
 ## `planos`
@@ -167,10 +169,13 @@ de falha de auditoria.
 Base para refresh tokens do admin local. O access token e JWT HS256 de curta
 duracao e o refresh token opaco e armazenado como hash.
 
+## `admin_login_failures`
+
+Registra falhas recentes de login do admin local por usuario/IP para aplicar
+bloqueio temporario depois de 5 falhas em 15 minutos.
+
 ## Pendencias de Schema
 
-- Adicionar migrations incrementais.
-- Ligar provider HTTP real do Mercado Pago.
 - Persistir eventos OpenNDS.
 - Ampliar logs de auditoria conforme novos fluxos admin entrarem.
 - Separar tabelas cloud em docs proprias quando o cloud voltar para o escopo.

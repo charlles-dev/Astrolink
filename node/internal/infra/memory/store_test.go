@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/astrolink/node/internal/infra/memory"
 	"github.com/astrolink/node/internal/store"
@@ -63,5 +64,85 @@ func TestStore_AppendAdminLog_AdminLogsRetornaEventoFiltravel(t *testing.T) {
 	}
 	if string(got[0].Detalhes) != `{"lote_id":7,"quantidade":2}` {
 		t.Fatalf("Detalhes = %s", string(got[0].Detalhes))
+	}
+}
+
+func TestStore_AdminLoginLockout_BloqueiaFalhasRecentesELiberaAposJanela(t *testing.T) {
+	repo := memory.NewStore()
+	ctx := context.Background()
+	identity := store.AdminLoginIdentity{Usuario: "admin", IP: "192.0.2.10"}
+	start := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
+
+	for i := 0; i < 4; i++ {
+		status, err := repo.RecordAdminLoginFailure(ctx, store.AdminLoginFailureInput{
+			Identity: identity,
+			At:       start.Add(time.Duration(i) * time.Minute),
+			Window:   15 * time.Minute,
+			Limit:    5,
+		})
+		if err != nil {
+			t.Fatalf("RecordAdminLoginFailure() error = %v", err)
+		}
+		if status.Locked {
+			t.Fatalf("falha %d Locked = true, want false", i+1)
+		}
+	}
+
+	status, err := repo.RecordAdminLoginFailure(ctx, store.AdminLoginFailureInput{
+		Identity: identity,
+		At:       start.Add(4 * time.Minute),
+		Window:   15 * time.Minute,
+		Limit:    5,
+	})
+	if err != nil {
+		t.Fatalf("RecordAdminLoginFailure() error = %v", err)
+	}
+	if !status.Locked || status.Failures != 5 {
+		t.Fatalf("status = %+v, want locked with 5 failures", status)
+	}
+
+	locked, err := repo.AdminLoginLocked(ctx, store.AdminLoginLockoutQuery{
+		Identity: identity,
+		Since:    start.Add(20 * time.Minute).Add(-15 * time.Minute),
+		Limit:    5,
+	})
+	if err != nil {
+		t.Fatalf("AdminLoginLocked() error = %v", err)
+	}
+	if locked {
+		t.Fatal("AdminLoginLocked() apos janela = true, want false")
+	}
+}
+
+func TestStore_AdminLoginLockout_LoginCorretoLimpaFalhas(t *testing.T) {
+	repo := memory.NewStore()
+	ctx := context.Background()
+	identity := store.AdminLoginIdentity{Usuario: "admin", IP: "192.0.2.10"}
+	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
+
+	for i := 0; i < 4; i++ {
+		if _, err := repo.RecordAdminLoginFailure(ctx, store.AdminLoginFailureInput{
+			Identity: identity,
+			At:       now.Add(time.Duration(i) * time.Minute),
+			Window:   15 * time.Minute,
+			Limit:    5,
+		}); err != nil {
+			t.Fatalf("RecordAdminLoginFailure() error = %v", err)
+		}
+	}
+
+	if err := repo.ClearAdminLoginFailures(ctx, identity); err != nil {
+		t.Fatalf("ClearAdminLoginFailures() error = %v", err)
+	}
+	locked, err := repo.AdminLoginLocked(ctx, store.AdminLoginLockoutQuery{
+		Identity: identity,
+		Since:    now.Add(-15 * time.Minute),
+		Limit:    5,
+	})
+	if err != nil {
+		t.Fatalf("AdminLoginLocked() error = %v", err)
+	}
+	if locked {
+		t.Fatal("AdminLoginLocked() depois de limpar = true, want false")
 	}
 }

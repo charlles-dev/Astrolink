@@ -48,7 +48,7 @@ describe('AdminVouchersPanel', () => {
     vi.unstubAllGlobals()
   })
 
-  it('prints a voucher sheet from the listed vouchers', async () => {
+  it('prints a PDF-ready voucher sheet with batch summary and customer instructions', async () => {
     const print = vi.fn()
     vi.stubGlobal('print', print)
 
@@ -60,12 +60,19 @@ describe('AdminVouchersPanel', () => {
       }
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Imprimir folha' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Gerar folha PDF' }))
 
     expect(print).toHaveBeenCalledTimes(1)
 
     const sheet = screen.getByTestId('voucher-print-sheet')
     const tickets = within(sheet).getAllByRole('article')
+
+    expect(within(sheet).getByRole('heading', { name: 'Astrolink' })).toBeInTheDocument()
+    expect(within(sheet).getByText('Folha para PDF ou impressao')).toBeInTheDocument()
+    expect(within(sheet).getByText('2 vouchers')).toBeInTheDocument()
+    expect(within(sheet).getAllByText('Lote 12').length).toBeGreaterThan(0)
+    expect(within(sheet).getAllByText('Acesso 24 Horas').length).toBeGreaterThan(0)
+    expect(within(sheet).getByText('Recorte nas linhas pontilhadas')).toBeInTheDocument()
 
     expect(tickets).toHaveLength(2)
     expect(within(tickets[0]).getByText('VIPA-7777')).toBeInTheDocument()
@@ -74,6 +81,8 @@ describe('AdminVouchersPanel', () => {
     expect(within(tickets[0]).getByText('0/1')).toBeInTheDocument()
     expect(within(tickets[0]).getByText('Lote 12')).toBeInTheDocument()
     expect(within(tickets[0]).getByText('01/06/2026')).toBeInTheDocument()
+    expect(within(tickets[0]).getByText('Digite este codigo no portal do Wi-Fi.')).toBeInTheDocument()
+    expect(within(tickets[0]).getByText('Valido somente ate a data indicada.')).toBeInTheDocument()
     expect(within(tickets[1]).getByText('Universal')).toBeInTheDocument()
     expect(within(tickets[1]).getByText('3/25')).toBeInTheDocument()
   })

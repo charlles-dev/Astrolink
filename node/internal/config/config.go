@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+const (
+	EnvPaymentsProvider       = "PAYMENTS_PROVIDER"
+	EnvMercadoPagoAccessToken = "MERCADOPAGO_ACCESS_TOKEN"
+	EnvMercadoPagoAPIBaseURL  = "MERCADOPAGO_API_BASE_URL"
+	DefaultPaymentsProvider   = "demo"
+)
+
 type Config struct {
 	Env           string
 	HTTPAddr      string
@@ -18,6 +25,9 @@ type Config struct {
 	DatabaseURL   string
 	LogLevel      slog.Level
 
+	PaymentsProvider         string
+	MercadoPagoAccessToken   string
+	MercadoPagoAPIBaseURL    string
 	MercadoPagoWebhookSecret string
 
 	OpenNDSEnabled bool
@@ -40,6 +50,9 @@ func FromEnv() Config {
 		DatabaseURL:   env("DATABASE_URL", ""),
 		LogLevel:      parseLogLevel(env("LOG_LEVEL", "info")),
 
+		PaymentsProvider:         env(EnvPaymentsProvider, DefaultPaymentsProvider),
+		MercadoPagoAccessToken:   env(EnvMercadoPagoAccessToken, ""),
+		MercadoPagoAPIBaseURL:    env(EnvMercadoPagoAPIBaseURL, ""),
 		MercadoPagoWebhookSecret: env("MERCADOPAGO_WEBHOOK_SECRET", ""),
 
 		OpenNDSEnabled: parseBool(env("OPENNDS_ENABLED", "false")),

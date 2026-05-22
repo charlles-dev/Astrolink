@@ -6,6 +6,7 @@
 - HTTP: Fiber
 - Banco: Postgres ou store em memoria para desenvolvimento rapido
 - Roteador: OpenNDS via SSH/`ndsctl`
+- Pagamentos: provider demo por padrao, provider Mercado Pago para reconciliacao de webhook quando configurado
 
 Codigo fonte: `node/`
 
@@ -63,6 +64,10 @@ DATABASE_URL=postgres://astrolink:devpassword@localhost:5432/astrolink?sslmode=d
 ADMIN_USUARIO=admin
 ADMIN_SENHA=admin123
 JWT_SECRET=dev-jwt-secret-nao-usar-em-producao-32chars
+PAYMENTS_PROVIDER=demo
+MERCADOPAGO_ACCESS_TOKEN=TEST-XXXX-XXXX-XXXX
+MERCADOPAGO_API_BASE_URL=
+MERCADOPAGO_WEBHOOK_SECRET=test-webhook-secret
 NODE_NAME=dev-node-01
 OPENNDS_ENABLED=false
 OPENNDS_SSH_HOST=192.168.1.1
@@ -71,6 +76,17 @@ OPENNDS_SSH_USER=root
 OPENNDS_SSH_KEY_PATH=C:\Users\charl\.ssh\id_ed25519
 OPENNDS_AUTH_RETRIES=3
 ```
+
+Para consultar detalhes reais de pagamento no webhook Mercado Pago, use:
+
+```env
+PAYMENTS_PROVIDER=mercadopago
+MERCADOPAGO_ACCESS_TOKEN=<access-token>
+MERCADOPAGO_WEBHOOK_SECRET=<webhook-secret>
+```
+
+`MERCADOPAGO_API_BASE_URL` e opcional e serve para testes/stubs; vazio usa
+`https://api.mercadopago.com`.
 
 ## OpenNDS
 
@@ -86,11 +102,7 @@ por SSH no roteador configurado.
 
 ## Proximas Pendencias do Backend
 
-- Logs de auditoria no admin.
-- CRUD completo de planos.
-- Exportacao e impressao de vouchers.
-- Webhook real do Mercado Pago.
-- Job de expiracao de sessoes.
-- Logs de auditoria.
-- Backup/restore.
+- Criacao PIX real pelo Mercado Pago.
+- 2FA opcional no admin local.
+- Agendamento automatico de jobs operacionais.
 - Testes E2E com Postgres e OpenNDS simulado.

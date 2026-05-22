@@ -38,3 +38,31 @@ func TestFromEnv_LoadsOpenNDSConfig(t *testing.T) {
 		t.Fatalf("OpenNDSRetries = %d", cfg.OpenNDSRetries)
 	}
 }
+
+func TestFromEnv_LoadsPaymentProviderConfig(t *testing.T) {
+	t.Setenv("PAYMENTS_PROVIDER", "mercadopago")
+	t.Setenv("MERCADOPAGO_ACCESS_TOKEN", "mp-token")
+	t.Setenv("MERCADOPAGO_API_BASE_URL", "https://api.example.test")
+
+	cfg := FromEnv()
+
+	if cfg.PaymentsProvider != "mercadopago" {
+		t.Fatalf("PaymentsProvider = %q", cfg.PaymentsProvider)
+	}
+	if cfg.MercadoPagoAccessToken != "mp-token" {
+		t.Fatalf("MercadoPagoAccessToken = %q", cfg.MercadoPagoAccessToken)
+	}
+	if cfg.MercadoPagoAPIBaseURL != "https://api.example.test" {
+		t.Fatalf("MercadoPagoAPIBaseURL = %q", cfg.MercadoPagoAPIBaseURL)
+	}
+}
+
+func TestFromEnv_DefaultsPaymentProviderToDemo(t *testing.T) {
+	t.Setenv("PAYMENTS_PROVIDER", "")
+
+	cfg := FromEnv()
+
+	if cfg.PaymentsProvider != "demo" {
+		t.Fatalf("PaymentsProvider = %q, want demo", cfg.PaymentsProvider)
+	}
+}

@@ -22,6 +22,7 @@ type Store struct {
 	usuarios      map[string]store.Usuario
 	pix           map[string]store.PixTransaction
 	adminSessions map[string]store.AdminSession
+	adminFailures map[string][]time.Time
 	adminLogs     []store.AdminLog
 	nextPlanoID   int
 	nextVoucherID int
@@ -50,6 +51,7 @@ func NewStore() *Store {
 		usuarios:      map[string]store.Usuario{},
 		pix:           map[string]store.PixTransaction{},
 		adminSessions: map[string]store.AdminSession{},
+		adminFailures: map[string][]time.Time{},
 		nextPlanoID:   4,
 		nextVoucherID: 3,
 		nextLoteID:    1,
@@ -163,7 +165,7 @@ func (s *Store) CreatePix(ctx context.Context, input store.CreatePixInput) (stor
 	}
 	txid := fmt.Sprintf("ast_%d_%d", time.Now().UnixNano(), len(s.pix)+1)
 	now := time.Now().UTC()
-	pix, err := payments.NewProvider(payments.ProviderDemo).CreatePix(ctx, payments.CreatePixInput{
+	pix, err := payments.NewProvider(payments.ProviderConfig{Name: payments.ProviderDemo}).CreatePix(ctx, payments.CreatePixInput{
 		TXID:      txid,
 		Valor:     plano.PrecoFormatado,
 		Descricao: "Astrolink Wi-Fi - " + plano.Nome,
@@ -448,6 +450,38 @@ func (s *Store) RevokeAdminSession(_ context.Context, refreshTokenHash string) e
 	return nil
 }
 
+func (s *Store) AdminLoginLocked(_ context.Context, query store.AdminLoginLockoutQuery) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureAdminFailures()
+	key := adminLoginFailureKey(query.Identity)
+	failures := recentAdminLoginFailures(s.adminFailures[key], query.Since)
+	s.adminFailures[key] = failures
+	return len(failures) >= query.Limit, nil
+}
+
+func (s *Store) RecordAdminLoginFailure(_ context.Context, input store.AdminLoginFailureInput) (store.AdminLoginFailureStatus, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureAdminFailures()
+	key := adminLoginFailureKey(input.Identity)
+	failures := recentAdminLoginFailures(s.adminFailures[key], input.At.Add(-input.Window))
+	failures = append(failures, input.At.UTC())
+	s.adminFailures[key] = failures
+	return store.AdminLoginFailureStatus{
+		Failures: len(failures),
+		Locked:   len(failures) >= input.Limit,
+	}, nil
+}
+
+func (s *Store) ClearAdminLoginFailures(_ context.Context, identity store.AdminLoginIdentity) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureAdminFailures()
+	delete(s.adminFailures, adminLoginFailureKey(identity))
+	return nil
+}
+
 func (s *Store) AppendAdminLog(_ context.Context, input store.AdminLogInput) error {
 	log := adminLogFromInput(input)
 	s.mu.Lock()
@@ -482,6 +516,12 @@ func (s *Store) Health(context.Context) store.Health {
 func (s *Store) ensureAdminSessions() {
 	if s.adminSessions == nil {
 		s.adminSessions = map[string]store.AdminSession{}
+	}
+}
+
+func (s *Store) ensureAdminFailures() {
+	if s.adminFailures == nil {
+		s.adminFailures = map[string][]time.Time{}
 	}
 }
 
@@ -534,6 +574,20 @@ func normalizeMAC(mac string) string {
 		return "00:00:00:00:00:00"
 	}
 	return strings.ToUpper(mac)
+}
+
+func adminLoginFailureKey(identity store.AdminLoginIdentity) string {
+	return strings.ToLower(strings.TrimSpace(identity.Usuario)) + "|" + strings.TrimSpace(identity.IP)
+}
+
+func recentAdminLoginFailures(failures []time.Time, since time.Time) []time.Time {
+	recent := make([]time.Time, 0, len(failures))
+	for _, failure := range failures {
+		if !failure.Before(since) {
+			recent = append(recent, failure)
+		}
+	}
+	return recent
 }
 
 func voucherMatchesFilter(voucher vouchers.Voucher, filter store.AdminVoucherFilter) bool {

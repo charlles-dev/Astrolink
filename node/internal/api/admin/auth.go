@@ -8,6 +8,11 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+const (
+	adminLoginLockoutLimit  = 5
+	adminLoginLockoutWindow = 15 * time.Minute
+)
+
 func loginHandler(deps Dependencies) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body struct {
@@ -17,7 +22,37 @@ func loginHandler(deps Dependencies) fiber.Handler {
 		if err := c.BodyParser(&body); err != nil {
 			return adminError(c, fiber.StatusBadRequest, "validacao_falhou", "JSON invalido")
 		}
+		now := time.Now().UTC()
+		identity := store.AdminLoginIdentity{Usuario: body.Usuario, IP: c.IP()}
+		lockoutStore, hasLockoutStore := deps.Store.(store.AdminLoginLockoutStore)
+		if hasLockoutStore {
+			locked, err := lockoutStore.AdminLoginLocked(c.UserContext(), store.AdminLoginLockoutQuery{
+				Identity: identity,
+				Since:    now.Add(-adminLoginLockoutWindow),
+				Limit:    adminLoginLockoutLimit,
+			})
+			if err != nil {
+				return adminError(c, fiber.StatusInternalServerError, "erro_interno", "erro ao verificar bloqueio de login")
+			}
+			if locked {
+				return adminLoginLockoutError(c)
+			}
+		}
 		if body.Usuario != deps.Config.AdminUser || body.Senha != deps.Config.AdminPassword {
+			if hasLockoutStore {
+				status, err := lockoutStore.RecordAdminLoginFailure(c.UserContext(), store.AdminLoginFailureInput{
+					Identity: identity,
+					At:       now,
+					Window:   adminLoginLockoutWindow,
+					Limit:    adminLoginLockoutLimit,
+				})
+				if err != nil {
+					return adminError(c, fiber.StatusInternalServerError, "erro_interno", "erro ao registrar falha de login")
+				}
+				if status.Locked {
+					return adminLoginLockoutError(c)
+				}
+			}
 			return adminError(c, fiber.StatusUnauthorized, "nao_autenticado", "credenciais invalidas")
 		}
 		authStore, ok := deps.Store.(store.AdminAuthStore)
@@ -34,7 +69,6 @@ func loginHandler(deps Dependencies) fiber.Handler {
 		if err != nil {
 			return adminError(c, fiber.StatusInternalServerError, "erro_interno", "erro ao gerar refresh token")
 		}
-		now := time.Now().UTC()
 		err = authStore.CreateAdminSession(c.UserContext(), store.CreateAdminSessionInput{
 			Usuario:          body.Usuario,
 			RefreshTokenHash: adminauth.HashRefreshToken(refreshToken),
@@ -44,6 +78,11 @@ func loginHandler(deps Dependencies) fiber.Handler {
 		})
 		if err != nil {
 			return adminError(c, fiber.StatusInternalServerError, "erro_interno", "erro ao criar sessao")
+		}
+		if hasLockoutStore {
+			if err := lockoutStore.ClearAdminLoginFailures(c.UserContext(), identity); err != nil {
+				return adminError(c, fiber.StatusInternalServerError, "erro_interno", "erro ao limpar falhas de login")
+			}
 		}
 		return authResponse(c, accessToken, refreshToken)
 	}
@@ -130,4 +169,8 @@ func authResponse(c *fiber.Ctx, accessToken, refreshToken string) error {
 		"expires_in":    int(adminauth.AccessTokenTTL.Seconds()),
 		"token_type":    "Bearer",
 	})
+}
+
+func adminLoginLockoutError(c *fiber.Ctx) error {
+	return adminError(c, fiber.StatusTooManyRequests, "login_bloqueado", "login bloqueado temporariamente por muitas falhas")
 }

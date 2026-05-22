@@ -72,9 +72,11 @@ AMQP_URL=amqp://astrolink:devrabbit@localhost:5672/
 
 JWT_SECRET=dev-jwt-secret-nao-usar-em-producao-32chars
 
-MP_ACCESS_TOKEN=TEST-XXXX-XXXX-XXXX
+PAYMENTS_PROVIDER=demo
+MERCADOPAGO_ACCESS_TOKEN=TEST-XXXX-XXXX-XXXX
+MERCADOPAGO_API_BASE_URL=
+MERCADOPAGO_WEBHOOK_SECRET=test-webhook-secret
 MP_PUBLIC_KEY=TEST-XXXX-XXXX-XXXX
-MP_WEBHOOK_SECRET=test-webhook-secret
 
 ADMIN_USUARIO=admin
 ADMIN_SENHA=admin123
@@ -132,6 +134,9 @@ make clean         # remove builds locais
 ## Banco Local
 
 O Postgres dev e inicializado com as migrations de `node/migrations/`.
+
+Para webhook Mercado Pago real, altere `PAYMENTS_PROVIDER=mercadopago` e
+configure `MERCADOPAGO_ACCESS_TOKEN` junto com `MERCADOPAGO_WEBHOOK_SECRET`.
 
 Para reiniciar a infra:
 

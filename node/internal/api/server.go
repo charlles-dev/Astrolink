@@ -8,6 +8,7 @@ import (
 	"github.com/astrolink/node/internal/api/portal"
 	"github.com/astrolink/node/internal/config"
 	"github.com/astrolink/node/internal/gateway"
+	"github.com/astrolink/node/internal/payments"
 	"github.com/astrolink/node/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
@@ -45,6 +46,11 @@ func NewServer(deps Dependencies) *fiber.App {
 		Logger:                   deps.Logger,
 		Env:                      deps.Config.Env,
 		MercadoPagoWebhookSecret: deps.Config.MercadoPagoWebhookSecret,
+		PaymentProvider: payments.NewProvider(payments.ProviderConfig{
+			Name:                   deps.Config.PaymentsProvider,
+			MercadoPagoAccessToken: deps.Config.MercadoPagoAccessToken,
+			MercadoPagoAPIBaseURL:  deps.Config.MercadoPagoAPIBaseURL,
+		}),
 	})
 	admin.Register(app, admin.Dependencies{
 		Config:  deps.Config,

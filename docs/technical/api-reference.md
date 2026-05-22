@@ -262,6 +262,9 @@ Resposta:
 O access token e um JWT HS256 com validade de 8 horas. O refresh token e opaco,
 armazenado como hash, com validade de 30 dias.
 
+Depois de 5 falhas de senha recentes para o mesmo usuario/IP em uma janela de
+15 minutos, a rota retorna `429 login_bloqueado` ate a janela expirar.
+
 ### `POST /admin/auth/refresh`
 
 Body:
@@ -508,6 +511,6 @@ Erros esperados:
 ## Backlog da API
 
 - Ampliar cobertura de auditoria para fluxos futuros.
-- Provider real do Mercado Pago para buscar detalhes de pagamento.
-- Exportacao PDF desenhada para vouchers.
+- Criacao PIX real pelo Mercado Pago.
+- 2FA opcional no admin local.
 - Agendamento automatico de jobs operacionais.

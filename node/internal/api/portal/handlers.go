@@ -43,7 +43,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	}
 	paymentProvider := deps.PaymentProvider
 	if paymentProvider == nil {
-		paymentProvider = payments.NewProvider(payments.ProviderDemo)
+		paymentProvider = payments.NewProvider(payments.ProviderConfig{Name: payments.ProviderDemo})
 	}
 
 	app.Get("/api/settings", func(c *fiber.Ctx) error {

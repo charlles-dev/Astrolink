@@ -41,6 +41,9 @@ Resposta:
 O access token e um JWT HS256 com validade de 8 horas. O refresh token e opaco,
 armazenado como hash no no local, com validade de 30 dias.
 
+O login aplica bloqueio local por usuario/IP depois de 5 falhas em 15 minutos.
+Enquanto bloqueado, retorna `429 login_bloqueado` e nao cria sessao.
+
 `POST /admin/auth/refresh`
 
 Renova access token e refresh token.
@@ -117,7 +120,8 @@ Desativa voucher ainda ativo.
 `GET /admin/vouchers/export.csv`
 
 Exporta os vouchers filtrados em CSV. A tela tambem oferece impressao de folha
-de vouchers a partir da lista atual.
+PDF/impressao de vouchers a partir da lista atual, com resumo de lote, plano,
+usos, validade e instrucoes para recorte.
 
 ### Pagamentos
 
@@ -170,6 +174,7 @@ O painel local cobre:
 - botao de desconectar usuario
 - CRUD de planos
 - geracao, filtros, CSV, desativacao e impressao de vouchers
+- folha PDF/impressao de vouchers com tickets de recorte
 - historico de pagamentos e exportacao CSV
 - eventos ao vivo com snapshot operacional
 - logs operacionais/auditoria e exportacao CSV
@@ -179,9 +184,8 @@ O painel local cobre:
 
 Evoluir o admin local com:
 
-- provider real do Mercado Pago
 - 2FA opcional para o admin local
-- template PDF desenhado para vouchers
+- criacao PIX real pelo Mercado Pago
 - agendamento automatico de jobs operacionais
 
 O admin cloud continua fora desta fase.

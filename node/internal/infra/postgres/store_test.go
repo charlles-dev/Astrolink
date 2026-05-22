@@ -212,6 +212,78 @@ func TestStore_AppendAdminLog_InsereNaTabelaLogs(t *testing.T) {
 	assertExpectations(t, mock)
 }
 
+func TestStore_AdminLoginLocked_ContaFalhasRecentesPorUsuarioEIP(t *testing.T) {
+	db, mock := newMockDB(t)
+	defer db.Close()
+	repo := postgres.NewStore(db, fixedClock)
+	since := fixedClock().Add(-15 * time.Minute)
+
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM admin_login_failures").
+		WithArgs("admin", "192.0.2.10", since).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(5))
+
+	locked, err := repo.AdminLoginLocked(context.Background(), store.AdminLoginLockoutQuery{
+		Identity: store.AdminLoginIdentity{Usuario: "admin", IP: "192.0.2.10"},
+		Since:    since,
+		Limit:    5,
+	})
+	if err != nil {
+		t.Fatalf("AdminLoginLocked() error = %v", err)
+	}
+	if !locked {
+		t.Fatal("AdminLoginLocked() = false, want true")
+	}
+	assertExpectations(t, mock)
+}
+
+func TestStore_RecordAdminLoginFailure_RetornaBloqueadoNaQuintaFalha(t *testing.T) {
+	db, mock := newMockDB(t)
+	defer db.Close()
+	repo := postgres.NewStore(db, fixedClock)
+	now := fixedClock()
+
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM admin_login_failures").
+		WithArgs("admin", "192.0.2.10", now.Add(-15*time.Minute)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("INSERT INTO admin_login_failures").
+		WithArgs("admin", "192.0.2.10", now).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM admin_login_failures").
+		WithArgs("admin", "192.0.2.10", now.Add(-15*time.Minute)).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(5))
+	mock.ExpectCommit()
+
+	status, err := repo.RecordAdminLoginFailure(context.Background(), store.AdminLoginFailureInput{
+		Identity: store.AdminLoginIdentity{Usuario: "admin", IP: "192.0.2.10"},
+		At:       now,
+		Window:   15 * time.Minute,
+		Limit:    5,
+	})
+	if err != nil {
+		t.Fatalf("RecordAdminLoginFailure() error = %v", err)
+	}
+	if !status.Locked || status.Failures != 5 {
+		t.Fatalf("status = %+v, want locked with 5 failures", status)
+	}
+	assertExpectations(t, mock)
+}
+
+func TestStore_ClearAdminLoginFailures_RemoveFalhasDoUsuarioEIP(t *testing.T) {
+	db, mock := newMockDB(t)
+	defer db.Close()
+	repo := postgres.NewStore(db, fixedClock)
+
+	mock.ExpectExec("DELETE FROM admin_login_failures").
+		WithArgs("admin", "192.0.2.10").
+		WillReturnResult(sqlmock.NewResult(0, 4))
+
+	if err := repo.ClearAdminLoginFailures(context.Background(), store.AdminLoginIdentity{Usuario: "admin", IP: "192.0.2.10"}); err != nil {
+		t.Fatalf("ClearAdminLoginFailures() error = %v", err)
+	}
+	assertExpectations(t, mock)
+}
+
 func newMockDB(t *testing.T) (*sql.DB, sqlmock.Sqlmock) {
 	t.Helper()
 	db, mock, err := sqlmock.New()

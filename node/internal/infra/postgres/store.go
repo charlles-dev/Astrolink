@@ -213,7 +213,7 @@ func (s *Store) CreatePix(ctx context.Context, input store.CreatePixInput) (stor
 	}
 	now := s.clock().UTC()
 	txid := fmt.Sprintf("ast_%d", time.Now().UnixNano())
-	pix, err := payments.NewProvider(payments.ProviderDemo).CreatePix(ctx, payments.CreatePixInput{
+	pix, err := payments.NewProvider(payments.ProviderConfig{Name: payments.ProviderDemo}).CreatePix(ctx, payments.CreatePixInput{
 		TXID:      txid,
 		Valor:     plano.PrecoFormatado,
 		Descricao: "Astrolink Wi-Fi - " + plano.Nome,
@@ -699,6 +699,63 @@ func (s *Store) RevokeAdminSession(ctx context.Context, refreshTokenHash string)
 	return nil
 }
 
+func (s *Store) AdminLoginLocked(ctx context.Context, query store.AdminLoginLockoutQuery) (bool, error) {
+	count, err := s.countAdminLoginFailures(ctx, s.db, query.Identity, query.Since)
+	if err != nil {
+		return false, err
+	}
+	return count >= query.Limit, nil
+}
+
+func (s *Store) RecordAdminLoginFailure(ctx context.Context, input store.AdminLoginFailureInput) (store.AdminLoginFailureStatus, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.AdminLoginFailureStatus{}, fmt.Errorf("iniciar transacao falha login admin: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	since := input.At.Add(-input.Window)
+	identity := normalizeAdminLoginIdentity(input.Identity)
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM admin_login_failures
+		WHERE usuario = $1
+			AND ip IS NOT DISTINCT FROM NULLIF($2, '')::inet
+			AND created_at < $3`,
+		identity.Usuario, identity.IP, since); err != nil {
+		return store.AdminLoginFailureStatus{}, fmt.Errorf("limpar falhas antigas login admin: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO admin_login_failures (usuario, ip, created_at)
+		VALUES ($1, NULLIF($2, '')::inet, $3)`,
+		identity.Usuario, identity.IP, input.At.UTC()); err != nil {
+		return store.AdminLoginFailureStatus{}, fmt.Errorf("registrar falha login admin: %w", err)
+	}
+	count, err := s.countAdminLoginFailures(ctx, tx, identity, since)
+	if err != nil {
+		return store.AdminLoginFailureStatus{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return store.AdminLoginFailureStatus{}, fmt.Errorf("commit falha login admin: %w", err)
+	}
+	return store.AdminLoginFailureStatus{
+		Failures: count,
+		Locked:   count >= input.Limit,
+	}, nil
+}
+
+func (s *Store) ClearAdminLoginFailures(ctx context.Context, identity store.AdminLoginIdentity) error {
+	identity = normalizeAdminLoginIdentity(identity)
+	_, err := s.db.ExecContext(ctx, `
+		DELETE FROM admin_login_failures
+		WHERE usuario = $1
+			AND ip IS NOT DISTINCT FROM NULLIF($2, '')::inet`,
+		identity.Usuario, identity.IP)
+	if err != nil {
+		return fmt.Errorf("limpar falhas login admin: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) AppendAdminLog(ctx context.Context, input store.AdminLogInput) error {
 	createdAt := input.CreatedAt
 	if createdAt.IsZero() {
@@ -853,6 +910,21 @@ func selectAdminSession(ctx context.Context, q queryer, refreshTokenHash string)
 		WHERE refresh_token = $1
 		FOR UPDATE`, refreshTokenHash)
 	return scanAdminSession(row)
+}
+
+func (s *Store) countAdminLoginFailures(ctx context.Context, q queryer, identity store.AdminLoginIdentity, since time.Time) (int, error) {
+	identity = normalizeAdminLoginIdentity(identity)
+	var count int
+	err := q.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM admin_login_failures
+		WHERE usuario = $1
+			AND ip IS NOT DISTINCT FROM NULLIF($2, '')::inet
+			AND created_at >= $3`,
+		identity.Usuario, identity.IP, since.UTC()).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("contar falhas login admin: %w", err)
+	}
+	return count, nil
 }
 
 type scanner interface {
@@ -1093,6 +1165,13 @@ func normalizeMAC(mac string) string {
 
 func normalizeVoucherCode(code string) string {
 	return strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(code), " ", "-"))
+}
+
+func normalizeAdminLoginIdentity(identity store.AdminLoginIdentity) store.AdminLoginIdentity {
+	return store.AdminLoginIdentity{
+		Usuario: strings.ToLower(strings.TrimSpace(identity.Usuario)),
+		IP:      strings.TrimSpace(identity.IP),
+	}
 }
 
 func nullableInt(value *int) sql.NullInt64 {
