@@ -2,6 +2,7 @@ package admin
 
 import (
 	"github.com/astrolink/node/internal/gateway"
+	"github.com/astrolink/node/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -20,11 +21,18 @@ func usuariosHandler(deps Dependencies) fiber.Handler {
 	}
 }
 
-func desconectarUsuarioHandler(gatewayController gateway.Controller) fiber.Handler {
+func desconectarUsuarioHandler(deps Dependencies, gatewayController gateway.Controller) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		if err := gatewayController.Deauthorize(c.UserContext(), c.Params("mac")); err != nil {
+		mac := c.Params("mac")
+		if err := gatewayController.Deauthorize(c.UserContext(), mac); err != nil {
 			return adminError(c, fiber.StatusBadGateway, "roteador_indisponivel", "erro ao desconectar usuario no roteador")
 		}
+		appendAdminLog(c.UserContext(), deps, store.AdminLogInput{
+			Nivel:    "info",
+			Tipo:     "usuarios",
+			Mensagem: "usuario desconectado",
+			Detalhes: adminLogDetails(map[string]any{"mac": mac}),
+		})
 		return c.JSON(fiber.Map{"sucesso": true})
 	}
 }

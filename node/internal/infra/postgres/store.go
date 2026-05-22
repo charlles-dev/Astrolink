@@ -545,6 +545,32 @@ func adminPagamentosQuery(filter store.AdminPagamentoFilter) (string, []any) {
 	return query, args
 }
 
+func adminLogsQuery(filter store.AdminLogFilter) (string, []any) {
+	query := `
+		SELECT created_at, nivel, categoria, mensagem, COALESCE(dados::text, ''), COALESCE(mac_relacionado::text, '')
+		FROM logs`
+	clauses := []string{}
+	args := []any{}
+	addArg := func(value any) string {
+		args = append(args, value)
+		return fmt.Sprintf("$%d", len(args))
+	}
+	if strings.TrimSpace(filter.Nivel) != "" {
+		clauses = append(clauses, "nivel = "+addArg(normalizeAdminLogNivelForFilter(filter.Nivel)))
+	}
+	if strings.TrimSpace(filter.Tipo) != "" {
+		clauses = append(clauses, "LOWER(categoria) = LOWER("+addArg(strings.TrimSpace(filter.Tipo))+")")
+	}
+	if strings.TrimSpace(filter.Texto) != "" {
+		clauses = append(clauses, "CONCAT_WS(' ', nivel, categoria, mensagem, COALESCE(dados::text, ''), COALESCE(mac_relacionado::text, '')) ILIKE "+addArg("%"+strings.TrimSpace(filter.Texto)+"%"))
+	}
+	if len(clauses) > 0 {
+		query += "\n\t\tWHERE " + strings.Join(clauses, " AND ")
+	}
+	query += "\n\t\tORDER BY created_at DESC, id DESC\n\t\tLIMIT 200"
+	return query, args
+}
+
 func (s *Store) GenerateVouchers(ctx context.Context, input store.GenerateVouchersInput) (store.GenerateVouchersResult, error) {
 	if input.Quantidade < 1 || input.Quantidade > 200 {
 		return store.GenerateVouchersResult{}, store.ErrInvalidQuantity
@@ -671,6 +697,49 @@ func (s *Store) RevokeAdminSession(ctx context.Context, refreshTokenHash string)
 		return fmt.Errorf("revogar sessao admin: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) AppendAdminLog(ctx context.Context, input store.AdminLogInput) error {
+	createdAt := input.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = s.clock().UTC()
+	}
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO logs (nivel, categoria, mensagem, dados, mac_relacionado, created_at)
+		VALUES ($1, $2, $3, NULLIF($4, '')::jsonb, NULLIF($5, '')::macaddr, $6)`,
+		normalizeAdminLogNivelForInsert(input.Nivel),
+		normalizeAdminLogCategoria(input.Tipo),
+		normalizeAdminLogMensagem(input.Mensagem),
+		strings.TrimSpace(string(input.Detalhes)),
+		strings.TrimSpace(input.MACRelacionado),
+		createdAt.UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("registrar log admin: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) AdminLogs(ctx context.Context, filter store.AdminLogFilter) ([]store.AdminLog, error) {
+	query, args := adminLogsQuery(filter)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("buscar logs admin: %w", err)
+	}
+	defer rows.Close()
+
+	logs := []store.AdminLog{}
+	for rows.Next() {
+		log, err := scanAdminLog(rows)
+		if err != nil {
+			return nil, err
+		}
+		logs = append(logs, log)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterar logs admin: %w", err)
+	}
+	return logs, nil
 }
 
 func (s *Store) Health(ctx context.Context) store.Health {
@@ -946,6 +1015,32 @@ func scanAdminPagamento(row scanner) (store.AdminPagamento, error) {
 	return pagamento, nil
 }
 
+func scanAdminLog(row scanner) (store.AdminLog, error) {
+	var (
+		log            store.AdminLog
+		nivel          string
+		detalhes       string
+		macRelacionado string
+	)
+	if err := row.Scan(
+		&log.Timestamp,
+		&nivel,
+		&log.Tipo,
+		&log.Mensagem,
+		&detalhes,
+		&macRelacionado,
+	); err != nil {
+		return store.AdminLog{}, err
+	}
+	log.Timestamp = log.Timestamp.UTC()
+	log.Nivel = adminLogNivelForAPI(nivel)
+	if detalhes != "" {
+		log.Detalhes = []byte(detalhes)
+	}
+	log.MACRelacionado = strings.ToUpper(strings.TrimSpace(macRelacionado))
+	return log, nil
+}
+
 func scanAdminSession(row scanner) (store.AdminSession, error) {
 	var session store.AdminSession
 	if err := row.Scan(
@@ -1005,4 +1100,61 @@ func nullableInt(value *int) sql.NullInt64 {
 		return sql.NullInt64{}
 	}
 	return sql.NullInt64{Int64: int64(*value), Valid: true}
+}
+
+func normalizeAdminLogNivelForInsert(nivel string) string {
+	switch strings.ToLower(strings.TrimSpace(nivel)) {
+	case "debug":
+		return "DEBUG"
+	case "warn", "warning", "aviso":
+		return "WARN"
+	case "error", "erro":
+		return "ERROR"
+	default:
+		return "INFO"
+	}
+}
+
+func normalizeAdminLogNivelForFilter(nivel string) string {
+	switch strings.ToLower(strings.TrimSpace(nivel)) {
+	case "debug":
+		return "DEBUG"
+	case "info":
+		return "INFO"
+	case "warn", "warning", "aviso":
+		return "WARN"
+	case "error", "erro":
+		return "ERROR"
+	default:
+		return strings.ToUpper(strings.TrimSpace(nivel))
+	}
+}
+
+func adminLogNivelForAPI(nivel string) string {
+	switch strings.ToUpper(strings.TrimSpace(nivel)) {
+	case "DEBUG":
+		return "debug"
+	case "WARN":
+		return "aviso"
+	case "ERROR":
+		return "erro"
+	default:
+		return "info"
+	}
+}
+
+func normalizeAdminLogCategoria(tipo string) string {
+	tipo = strings.ToLower(strings.TrimSpace(tipo))
+	if tipo == "" {
+		return "admin"
+	}
+	return tipo
+}
+
+func normalizeAdminLogMensagem(mensagem string) string {
+	mensagem = strings.TrimSpace(mensagem)
+	if mensagem == "" {
+		return "acao admin"
+	}
+	return mensagem
 }

@@ -49,6 +49,16 @@ func criarPlanoHandler(deps Dependencies) fiber.Handler {
 		if err != nil {
 			return planoAdminError(c, err)
 		}
+		appendAdminLog(c.UserContext(), deps, store.AdminLogInput{
+			Nivel:    "info",
+			Tipo:     "planos",
+			Mensagem: "plano criado",
+			Detalhes: adminLogDetails(map[string]any{
+				"id":    plano.ID,
+				"nome":  plano.Nome,
+				"ativo": plano.Ativo,
+			}),
+		})
 		return c.Status(fiber.StatusCreated).JSON(fiber.Map{"plano": plano})
 	}
 }
@@ -71,6 +81,16 @@ func atualizarPlanoHandler(deps Dependencies) fiber.Handler {
 		if err != nil {
 			return planoAdminError(c, err)
 		}
+		appendAdminLog(c.UserContext(), deps, store.AdminLogInput{
+			Nivel:    "info",
+			Tipo:     "planos",
+			Mensagem: "plano atualizado",
+			Detalhes: adminLogDetails(map[string]any{
+				"id":    plano.ID,
+				"nome":  plano.Nome,
+				"ativo": plano.Ativo,
+			}),
+		})
 		return c.JSON(fiber.Map{"plano": plano})
 	}
 }
@@ -98,6 +118,16 @@ func alterarStatusPlanoHandler(deps Dependencies) fiber.Handler {
 		if err != nil {
 			return planoAdminError(c, err)
 		}
+		appendAdminLog(c.UserContext(), deps, store.AdminLogInput{
+			Nivel:    "info",
+			Tipo:     "planos",
+			Mensagem: "status de plano alterado",
+			Detalhes: adminLogDetails(map[string]any{
+				"id":    plano.ID,
+				"nome":  plano.Nome,
+				"ativo": plano.Ativo,
+			}),
+		})
 		return c.JSON(fiber.Map{"plano": plano})
 	}
 }

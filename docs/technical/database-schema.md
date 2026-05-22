@@ -158,7 +158,9 @@ Seeds atuais:
 
 ## `logs`
 
-Tabela para auditoria. Ainda precisa ser ligada aos fluxos principais.
+Tabela para auditoria e eventos operacionais do admin local. Acoes mutaveis
+registram logs em modo best-effort, sem bloquear a operacao principal em caso
+de falha de auditoria.
 
 ## `sessoes_admin`
 
@@ -170,5 +172,5 @@ duracao e o refresh token opaco e armazenado como hash.
 - Adicionar migrations incrementais.
 - Ligar provider HTTP real do Mercado Pago.
 - Persistir eventos OpenNDS.
-- Persistir logs de auditoria dos fluxos admin.
+- Ampliar logs de auditoria conforme novos fluxos admin entrarem.
 - Separar tabelas cloud em docs proprias quando o cloud voltar para o escopo.

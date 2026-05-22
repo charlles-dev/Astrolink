@@ -463,6 +463,21 @@ Resposta:
 
 Exporta logs em CSV usando os mesmos filtros de `/admin/logs`.
 
+### `GET /admin/eventos`
+
+Stream SSE protegido para o painel local. Exige Bearer token e emite snapshots
+operacionais periodicos.
+
+Evento:
+
+```text
+event: snapshot
+data: {"timestamp":"2026-05-22T13:00:00Z","database":"memory","usuarios_total":1,"usuarios_ativos":0,"vouchers_total":2,"vouchers_ativos":2,"pagamentos_total":1,"pagamentos_pendentes":1,"pagamentos_aprovados":0,"logs_total":3}
+```
+
+Para smoke tests, `GET /admin/eventos?once=1` emite um snapshot e encerra a
+resposta.
+
 ### `POST /admin/backup`
 
 Solicita backup manual. No store em memoria retorna `501 backup_indisponivel`,
@@ -492,8 +507,7 @@ Erros esperados:
 
 ## Backlog da API
 
-- Logs de auditoria para acoes admin.
+- Ampliar cobertura de auditoria para fluxos futuros.
 - Provider real do Mercado Pago para buscar detalhes de pagamento.
 - Exportacao PDF desenhada para vouchers.
-- WebSocket ou SSE para admin local.
 - Agendamento automatico de jobs operacionais.

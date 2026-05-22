@@ -34,6 +34,7 @@ Responsabilidades atuais:
   validacao HMAC quando o segredo esta configurado.
 - Resgatar vouchers em `POST /api/voucher/resgatar`.
 - Expor endpoints iniciais de admin local.
+- Expor stream SSE protegido do admin em `GET /admin/eventos`.
 - Autorizar/desautorizar MACs no OpenNDS quando habilitado.
 
 O backend usa store em memoria quando `DATABASE_URL` nao esta configurado e
@@ -107,9 +108,14 @@ O painel local em `/painel` concentra as acoes de operacao do no:
 - Usuarios conectados e desconexao via OpenNDS.
 - Vouchers com geracao, filtros, CSV, desativacao e folha impressa.
 - Historico de pagamentos com CSV.
-- Logs operacionais com CSV.
+- Eventos ao vivo com snapshot operacional.
+- Logs operacionais/auditoria com CSV.
 - Backup manual quando Postgres esta configurado.
 - Validacao protegida de restore, sem executar restore destrutivo pela API.
+
+As acoes mutaveis do admin local registram auditoria em modo best-effort:
+falha ao gravar log nao derruba a acao principal. No store em memoria os logs
+vivem durante o processo; no Postgres usam a tabela local `logs`.
 
 ## Expiracao de Sessao
 

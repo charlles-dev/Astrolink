@@ -439,4 +439,42 @@ describe('AdminDashboard', () => {
       confirmacao: 'RESTAURAR'
     })
   })
+
+  it('renders live events from the dashboard stream state', () => {
+    render(AdminDashboard, {
+      props: {
+        health: null,
+        planos: [],
+        vouchers: [],
+        usuarios: [],
+        liveConnected: true,
+        liveLastEventAt: '2026-05-21T10:35:00Z',
+        liveSnapshot: {
+          usuarios: { ativos: 1, total: 3 },
+          vouchers: { ativos: 2, total: 4 },
+          pix: { pendente: 1, aprovado: 5 },
+          logs: 8
+        },
+        liveEvents: [
+          {
+            id: 'evt-1',
+            tipo: 'snapshot',
+            mensagem: 'Estado operacional atualizado',
+            timestamp: '2026-05-21T10:35:00Z'
+          }
+        ],
+        loading: false,
+        actionMessage: '',
+        onRefresh: vi.fn(),
+        onDisconnect: vi.fn(),
+        onGenerateVouchers: vi.fn(),
+        onLogout: vi.fn()
+      }
+    })
+
+    expect(screen.getByRole('heading', { name: 'Eventos ao vivo' })).toBeInTheDocument()
+    expect(screen.getByText('Conectado')).toBeInTheDocument()
+    expect(screen.getByText('1/3')).toBeInTheDocument()
+    expect(screen.getByText('Estado operacional atualizado')).toBeInTheDocument()
+  })
 })

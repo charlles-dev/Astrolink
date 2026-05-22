@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -48,6 +49,14 @@ type AdminPlanosStore interface {
 	CreateAdminPlano(context.Context, AdminPlanoInput) (planos.Plano, error)
 	UpdateAdminPlano(context.Context, int, AdminPlanoInput) (planos.Plano, error)
 	SetAdminPlanoStatus(context.Context, int, bool) (planos.Plano, error)
+}
+
+type AdminLogStore interface {
+	AdminLogs(context.Context, AdminLogFilter) ([]AdminLog, error)
+}
+
+type AdminLogWriter interface {
+	AppendAdminLog(context.Context, AdminLogInput) error
 }
 
 type Settings struct {
@@ -177,6 +186,30 @@ type AdminPagamentoFilter struct {
 	Inicio       *time.Time
 	Fim          *time.Time
 	FimExclusive bool
+}
+
+type AdminLog struct {
+	Timestamp      time.Time       `json:"timestamp"`
+	Nivel          string          `json:"nivel"`
+	Tipo           string          `json:"tipo"`
+	Mensagem       string          `json:"mensagem"`
+	Detalhes       json.RawMessage `json:"detalhes,omitempty"`
+	MACRelacionado string          `json:"-"`
+}
+
+type AdminLogFilter struct {
+	Nivel string
+	Tipo  string
+	Texto string
+}
+
+type AdminLogInput struct {
+	Nivel          string
+	Tipo           string
+	Mensagem       string
+	Detalhes       json.RawMessage
+	MACRelacionado string
+	CreatedAt      time.Time
 }
 
 type AdminPixTotals struct {

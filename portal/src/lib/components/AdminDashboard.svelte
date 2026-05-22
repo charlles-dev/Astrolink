@@ -1,5 +1,9 @@
 <script lang="ts">
   import AdminBackupPanel from './admin/AdminBackupPanel.svelte'
+  import AdminLiveEventsPanel, {
+    type AdminLiveEvent,
+    type AdminLiveSnapshot
+  } from './admin/AdminLiveEventsPanel.svelte'
   import AdminLogsPanel from './admin/AdminLogsPanel.svelte'
   import AdminMetrics from './admin/AdminMetrics.svelte'
   import AdminPaymentsPanel from './admin/AdminPaymentsPanel.svelte'
@@ -36,6 +40,10 @@
   }
   export let logs: AdminLog[] = []
   export let logsTotal = 0
+  export let liveConnected = false
+  export let liveLastEventAt = ''
+  export let liveSnapshot: AdminLiveSnapshot | null = null
+  export let liveEvents: AdminLiveEvent[] = []
   export let loading = false
   export let actionMessage = ''
   export let backupMessage = ''
@@ -103,6 +111,12 @@
     />
 
     <div class="operations-stack">
+      <AdminLiveEventsPanel
+        connected={liveConnected}
+        lastEventAt={liveLastEventAt}
+        snapshot={liveSnapshot}
+        events={liveEvents}
+      />
       <AdminLogsPanel
         {logs}
         total={logsTotal}

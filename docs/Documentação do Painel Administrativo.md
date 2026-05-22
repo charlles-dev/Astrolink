@@ -133,11 +133,20 @@ Exporta pagamentos filtrados em CSV.
 
 `GET /admin/logs`
 
-Lista eventos operacionais locais.
+Lista eventos operacionais locais e auditoria best-effort das acoes mutaveis do
+admin local, como planos, vouchers, backup, restore e desconexao de usuario.
 
 `GET /admin/logs/export.csv`
 
 Exporta logs filtrados em CSV.
+
+### Eventos ao Vivo
+
+`GET /admin/eventos`
+
+Stream SSE protegido usado pela tela de eventos ao vivo. O painel consome essa
+rota com `fetch` autenticado por Bearer token e exibe snapshots de usuarios,
+vouchers, PIX e logs.
 
 ### Backup e Restore
 
@@ -162,16 +171,17 @@ O painel local cobre:
 - CRUD de planos
 - geracao, filtros, CSV, desativacao e impressao de vouchers
 - historico de pagamentos e exportacao CSV
-- logs operacionais e exportacao CSV
+- eventos ao vivo com snapshot operacional
+- logs operacionais/auditoria e exportacao CSV
 - backup manual e validacao protegida de restore
 
 ## Proxima Etapa Recomendada
 
 Evoluir o admin local com:
 
-- SSE/WebSocket de eventos ao vivo
 - provider real do Mercado Pago
+- 2FA opcional para o admin local
 - template PDF desenhado para vouchers
-- logs de auditoria
+- agendamento automatico de jobs operacionais
 
 O admin cloud continua fora desta fase.

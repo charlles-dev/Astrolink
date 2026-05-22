@@ -1,8 +1,12 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onDestroy, onMount } from 'svelte'
 
   import { APIError, api } from '$lib/api'
   import AdminDashboard from '$lib/components/AdminDashboard.svelte'
+  import type {
+    AdminLiveEvent,
+    AdminLiveSnapshot
+  } from '$lib/components/admin/AdminLiveEventsPanel.svelte'
   import type {
     AdminHealthResponse,
     AdminLog,
@@ -33,6 +37,10 @@
   let pagamentosTotais: AdminPaymentTotals = emptyPaymentTotals()
   let logs: AdminLog[] = []
   let logsTotal = 0
+  let liveConnected = false
+  let liveLastEventAt = ''
+  let liveSnapshot: AdminLiveSnapshot | null = null
+  let liveEvents: AdminLiveEvent[] = []
   let voucherFilters: AdminVoucherFilters = { status: 'ativo' }
   let paymentFilters: AdminPaymentFilters = {}
   let logFilters: AdminLogFilters = {}
@@ -41,12 +49,18 @@
   let loginError = ''
   let actionMessage = ''
   let backupMessage = ''
+  let liveAbortController: AbortController | null = null
+  let liveBuffer = ''
 
   onMount(() => {
     token = sessionStorage.getItem(TOKEN_KEY) || ''
     if (token) {
-      void loadDashboard()
+      void initializeDashboard()
     }
+  })
+
+  onDestroy(() => {
+    stopLiveEvents()
   })
 
   async function login() {
@@ -58,11 +72,17 @@
       token = result.access_token
       sessionStorage.setItem(TOKEN_KEY, token)
       await loadDashboard()
+      startLiveEvents()
     } catch (error) {
       loginError = messageFromError(error, 'Nao foi possivel entrar no painel')
     } finally {
       loginLoading = false
     }
+  }
+
+  async function initializeDashboard() {
+    await loadDashboard()
+    if (token) startLiveEvents()
   }
 
   async function loadDashboard() {
@@ -364,6 +384,7 @@
   }
 
   function resetSession() {
+    stopLiveEvents()
     sessionStorage.removeItem(TOKEN_KEY)
     token = ''
     health = null
@@ -374,10 +395,133 @@
     pagamentosTotais = emptyPaymentTotals()
     logs = []
     logsTotal = 0
+    liveConnected = false
+    liveLastEventAt = ''
+    liveSnapshot = null
+    liveEvents = []
     voucherFilters = { status: 'ativo' }
     paymentFilters = {}
     logFilters = {}
     backupMessage = ''
+  }
+
+  function startLiveEvents() {
+    if (!token) return
+
+    stopLiveEvents()
+    liveAbortController = new AbortController()
+    liveConnected = false
+    liveBuffer = ''
+    void readLiveEvents(token, liveAbortController)
+  }
+
+  function stopLiveEvents() {
+    liveAbortController?.abort()
+    liveAbortController = null
+    liveConnected = false
+    liveBuffer = ''
+  }
+
+  async function readLiveEvents(currentToken: string, controller: AbortController) {
+    try {
+      const response = await fetch('/admin/eventos', {
+        headers: { Authorization: `Bearer ${currentToken}` },
+        signal: controller.signal
+      })
+      if (response.status === 401) {
+        expireSessionIfUnauthorized(new APIError(401, 'nao_autorizado', 'Sessao expirada. Entre novamente.'))
+        return
+      }
+      if (!response.ok || !response.body) {
+        liveConnected = false
+        return
+      }
+
+      liveConnected = true
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        liveBuffer += decoder.decode(value, { stream: true })
+        drainLiveBuffer()
+      }
+    } catch {
+      if (!controller.signal.aborted) {
+        liveConnected = false
+      }
+    }
+  }
+
+  function drainLiveBuffer() {
+    const chunks = liveBuffer.split('\n\n')
+    liveBuffer = chunks.pop() ?? ''
+    chunks.forEach(processLiveEventBlock)
+  }
+
+  function processLiveEventBlock(block: string) {
+    const lines = block.split('\n')
+    const eventName =
+      lines.find((line) => line.startsWith('event:'))?.slice('event:'.length).trim() || 'message'
+    const data = lines
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice('data:'.length).trim())
+      .join('\n')
+    if (!data) return
+
+    try {
+      const payload = JSON.parse(data)
+      if (eventName === 'snapshot') {
+        applyLiveSnapshot(payload)
+      } else {
+        pushLiveEvent({
+          tipo: eventName,
+          mensagem: payload.mensagem ?? 'Evento recebido',
+          timestamp: payload.timestamp ?? new Date().toISOString()
+        })
+      }
+    } catch {
+      pushLiveEvent({
+        tipo: eventName,
+        mensagem: data,
+        timestamp: new Date().toISOString()
+      })
+    }
+  }
+
+  function applyLiveSnapshot(payload: Record<string, unknown>) {
+    const timestamp = String(payload.timestamp ?? new Date().toISOString())
+    liveLastEventAt = timestamp
+    liveSnapshot = {
+      usuarios: {
+        ativos: Number(payload.usuarios_ativos ?? 0),
+        total: Number(payload.usuarios_total ?? 0)
+      },
+      vouchers: {
+        ativos: Number(payload.vouchers_ativos ?? 0),
+        total: Number(payload.vouchers_total ?? 0)
+      },
+      pix: {
+        pendente: Number(payload.pagamentos_pendentes ?? 0),
+        aprovado: Number(payload.pagamentos_aprovados ?? 0)
+      },
+      logs: Number(payload.logs_total ?? 0)
+    }
+    pushLiveEvent({
+      tipo: 'snapshot',
+      mensagem: 'Estado operacional atualizado',
+      timestamp
+    })
+  }
+
+  function pushLiveEvent(event: AdminLiveEvent) {
+    liveEvents = [
+      {
+        id: `${event.timestamp}-${event.tipo}-${event.mensagem}`,
+        ...event
+      },
+      ...liveEvents
+    ].slice(0, 8)
   }
 
   function emptyPaymentTotals(): AdminPaymentTotals {
@@ -426,6 +570,10 @@
     {pagamentosTotais}
     {logs}
     {logsTotal}
+    {liveConnected}
+    {liveLastEventAt}
+    {liveSnapshot}
+    {liveEvents}
     {loading}
     {actionMessage}
     {backupMessage}

@@ -37,13 +37,14 @@ func Register(app *fiber.App, deps Dependencies) {
 	protected.Get("/pagamentos/export.csv", exportPagamentosCSVHandler(deps))
 	protected.Get("/logs", logsHandler(deps))
 	protected.Get("/logs/export.csv", exportLogsCSVHandler(deps))
+	protected.Get("/eventos", eventsHandler(deps))
 	protected.Post("/backup", backupHandler(deps))
 	protected.Post("/backup/restaurar", restoreBackupHandler(deps))
 	protected.Get("/vouchers", vouchersHandler(deps))
 	protected.Get("/vouchers/export.csv", exportVouchersCSVHandler(deps))
 	protected.Post("/vouchers/gerar", gerarVouchersHandler(deps))
 	protected.Patch("/vouchers/:id/desativar", desativarVoucherHandler(deps))
-	protected.Post("/usuarios/:mac/desconectar", desconectarUsuarioHandler(gatewayController))
+	protected.Post("/usuarios/:mac/desconectar", desconectarUsuarioHandler(deps, gatewayController))
 }
 
 func adminError(c *fiber.Ctx, status int, code, message string) error {

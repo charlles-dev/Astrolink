@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -177,6 +178,36 @@ func TestStore_RedeemVoucher_CodigoInexistente(t *testing.T) {
 	})
 	if !errors.Is(err, store.ErrVoucherNotFound) {
 		t.Fatalf("RedeemVoucher() error = %v, want ErrVoucherNotFound", err)
+	}
+	assertExpectations(t, mock)
+}
+
+func TestStore_AppendAdminLog_InsereNaTabelaLogs(t *testing.T) {
+	db, mock := newMockDB(t)
+	defer db.Close()
+	repo := postgres.NewStore(db, fixedClock)
+
+	mock.ExpectExec("INSERT INTO logs").
+		WithArgs(
+			"INFO",
+			"vouchers",
+			"vouchers gerados",
+			`{"lote_id":7}`,
+			"AA:BB:CC:DD:EE:FF",
+			fixedClock().UTC(),
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err := repo.AppendAdminLog(context.Background(), store.AdminLogInput{
+		Nivel:          "info",
+		Tipo:           "vouchers",
+		Mensagem:       "vouchers gerados",
+		Detalhes:       json.RawMessage(`{"lote_id":7}`),
+		MACRelacionado: "AA:BB:CC:DD:EE:FF",
+		CreatedAt:      fixedClock(),
+	})
+	if err != nil {
+		t.Fatalf("AppendAdminLog() error = %v", err)
 	}
 	assertExpectations(t, mock)
 }

@@ -22,6 +22,7 @@ Implemented:
 - Wave 1 auth/voucher foundation completed in commit `535ef86`: JWT access tokens, refresh/logout/me endpoints, protected admin routes, session persistence, stale-token panel handling, and advanced voucher generation controls.
 - Wave 2 reporting/reliability completed: admin payment history with CSV export, demo payments provider abstraction, operational logs with CSV export, backup endpoint disabled in memory/dev, and a session-expiration job hook.
 - Wave 3A polish completed: printable voucher sheet from `/painel`, Mercado Pago webhook signature validation with provider status reconciliation hook, development-only PIX approval endpoint, and protected restore validation that never executes destructive restore.
+- Wave 3B live operations completed: protected admin SSE snapshots, live events panel on `/painel`, and best-effort audit logs for mutating local admin actions.
 
 Out of scope for this roadmap:
 - Admin cloud.
@@ -323,7 +324,8 @@ Run after local admin is operational:
 - [x] Backup restore explicit confirmation workflow, implemented as safe validation only.
 - [ ] Real Mercado Pago provider client for payment detail fetches.
 - [ ] Highly designed PDF voucher export.
-- [ ] Admin WebSocket/SSE event stream.
+- [x] Admin SSE event stream with live local dashboard snapshot.
+- [x] Best-effort local audit logs for mutating admin actions.
 - [ ] Optional 2FA.
 
 ### Wave 3A: Current Parallel Dispatch
@@ -342,6 +344,22 @@ Wave 3A verification:
 - Browser DOM verification on `http://127.0.0.1:5173/painel`: voucher print action, restore protected form, and admin dashboard render.
 - Local API verification: admin login, PIX create, development approval, PIX status approved, Mercado Pago webhook without secret ignored in development, restore wrong confirmation rejected, restore confirmed returns safe `501 restore_indisponivel`.
 
+### Wave 3B: Current Parallel Dispatch
+
+Run after commit `383e9a2`:
+
+- [x] Agent Backend Events owned `GET /admin/eventos`, SSE snapshot payloads, and once-mode tests.
+- [x] Agent Frontend Live Events owned the compact `AdminLiveEventsPanel` and component tests.
+- [x] Agent Admin Audit Logs owned optional `AppendAdminLog`, memory/Postgres log persistence, and admin mutation audit tests.
+- [x] Coordinator registered the protected route, wired authenticated streaming fetch in `/painel`, integrated the live panel, added disconnect-user audit logging, updated docs, and ran full verification.
+
+Wave 3B verification:
+- `go test ./...` in `node`
+- `npm test`, `npm run check`, and `npm run build` in `portal`
+- `git diff --check`
+- Local API verification: admin login, `GET /admin/eventos?once=1`, voucher generation audit log visible in `/admin/logs`.
+- Browser DOM verification on `http://127.0.0.1:5173/painel`: live events panel visible and receiving snapshot state.
+
 ## Recommended Next Concrete Step
 
-Move to the next Wave 3 slice after committing Wave 3A. The strongest next slice is admin SSE/live events, because payments, logs, backup validation, router diagnostics, vouchers, and plans already have usable local operator screens.
+Move to the next Wave 3 slice after committing Wave 3B. The strongest remaining local slice is either the real Mercado Pago provider client or optional 2FA for the local admin.

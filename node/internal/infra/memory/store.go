@@ -22,6 +22,7 @@ type Store struct {
 	usuarios      map[string]store.Usuario
 	pix           map[string]store.PixTransaction
 	adminSessions map[string]store.AdminSession
+	adminLogs     []store.AdminLog
 	nextPlanoID   int
 	nextVoucherID int
 	nextLoteID    int
@@ -447,6 +448,33 @@ func (s *Store) RevokeAdminSession(_ context.Context, refreshTokenHash string) e
 	return nil
 }
 
+func (s *Store) AppendAdminLog(_ context.Context, input store.AdminLogInput) error {
+	log := adminLogFromInput(input)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.adminLogs = append(s.adminLogs, log)
+	return nil
+}
+
+func (s *Store) AdminLogs(_ context.Context, filter store.AdminLogFilter) ([]store.AdminLog, error) {
+	s.mu.RLock()
+	logs := make([]store.AdminLog, 0, len(s.adminLogs))
+	for _, log := range s.adminLogs {
+		if adminLogMatchesFilter(log, filter) {
+			logs = append(logs, cloneAdminLog(log))
+		}
+	}
+	s.mu.RUnlock()
+
+	sort.Slice(logs, func(i, j int) bool {
+		if !logs[i].Timestamp.Equal(logs[j].Timestamp) {
+			return logs[i].Timestamp.After(logs[j].Timestamp)
+		}
+		return logs[i].Mensagem > logs[j].Mensagem
+	})
+	return logs, nil
+}
+
 func (s *Store) Health(context.Context) store.Health {
 	return store.Health{DatabaseStatus: "memory"}
 }
@@ -596,4 +624,84 @@ func adminVoucherFromDomain(voucher vouchers.Voucher, plano planos.Plano) store.
 		LoteID:      voucher.LoteID,
 		CreatedAt:   voucher.CreatedAt,
 	}
+}
+
+func adminLogFromInput(input store.AdminLogInput) store.AdminLog {
+	timestamp := input.CreatedAt
+	if timestamp.IsZero() {
+		timestamp = time.Now().UTC()
+	}
+	return store.AdminLog{
+		Timestamp:      timestamp.UTC(),
+		Nivel:          normalizeAdminLogNivel(input.Nivel),
+		Tipo:           normalizeAdminLogTipo(input.Tipo),
+		Mensagem:       strings.TrimSpace(input.Mensagem),
+		Detalhes:       cloneRawMessage(input.Detalhes),
+		MACRelacionado: normalizeAdminLogMAC(input.MACRelacionado),
+	}
+}
+
+func normalizeAdminLogNivel(nivel string) string {
+	switch strings.ToLower(strings.TrimSpace(nivel)) {
+	case "debug":
+		return "debug"
+	case "warn", "warning", "aviso":
+		return "aviso"
+	case "error", "erro":
+		return "erro"
+	default:
+		return "info"
+	}
+}
+
+func normalizeAdminLogTipo(tipo string) string {
+	tipo = strings.ToLower(strings.TrimSpace(tipo))
+	if tipo == "" {
+		return "admin"
+	}
+	return tipo
+}
+
+func normalizeAdminLogMAC(mac string) string {
+	mac = strings.TrimSpace(mac)
+	if mac == "" {
+		return ""
+	}
+	return strings.ToUpper(mac)
+}
+
+func adminLogMatchesFilter(log store.AdminLog, filter store.AdminLogFilter) bool {
+	if filter.Nivel != "" && !strings.EqualFold(log.Nivel, filter.Nivel) {
+		return false
+	}
+	if filter.Tipo != "" && !strings.EqualFold(log.Tipo, filter.Tipo) {
+		return false
+	}
+	if filter.Texto != "" {
+		haystack := strings.ToLower(strings.Join([]string{
+			log.Nivel,
+			log.Tipo,
+			log.Mensagem,
+			string(log.Detalhes),
+			log.MACRelacionado,
+		}, " "))
+		if !strings.Contains(haystack, strings.ToLower(strings.TrimSpace(filter.Texto))) {
+			return false
+		}
+	}
+	return true
+}
+
+func cloneAdminLog(log store.AdminLog) store.AdminLog {
+	log.Detalhes = cloneRawMessage(log.Detalhes)
+	return log
+}
+
+func cloneRawMessage(raw []byte) []byte {
+	if len(raw) == 0 {
+		return nil
+	}
+	cloned := make([]byte, len(raw))
+	copy(cloned, raw)
+	return cloned
 }

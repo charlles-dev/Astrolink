@@ -10,6 +10,7 @@ import (
 
 	"github.com/astrolink/node/internal/config"
 	"github.com/astrolink/node/internal/domain/planos"
+	"github.com/astrolink/node/internal/gateway"
 	"github.com/astrolink/node/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
@@ -158,6 +159,65 @@ func TestRestoreBackupHandler_RetornaIndisponivelMesmoComConfirmacao(t *testing.
 	}
 }
 
+func TestGerarVouchersHandler_RegistraLogAdministrativo(t *testing.T) {
+	app := fiber.New()
+	repo := &auditOperationsStore{}
+	deps := Dependencies{Config: operationsTestConfig(), Store: repo}
+	app.Post("/admin/vouchers/gerar", gerarVouchersHandler(deps))
+
+	req := httptest.NewRequest("POST", "/admin/vouchers/gerar", strings.NewReader(`{"plano_id":2,"quantidade":2,"tipo":"single_use","prefixo":"VIP"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(body))
+	}
+	if len(repo.logs) != 1 {
+		t.Fatalf("logs = %+v", repo.logs)
+	}
+	log := repo.logs[0]
+	if log.Nivel != "info" || log.Tipo != "vouchers" || log.Mensagem != "vouchers gerados" {
+		t.Fatalf("log inesperado: %+v", log)
+	}
+	if !strings.Contains(string(log.Detalhes), `"quantidade":2`) || !strings.Contains(string(log.Detalhes), `"lote_id":7`) {
+		t.Fatalf("detalhes inesperados: %s", string(log.Detalhes))
+	}
+}
+
+func TestDesconectarUsuarioHandler_RegistraLogAdministrativo(t *testing.T) {
+	app := fiber.New()
+	repo := &auditOperationsStore{}
+	deps := Dependencies{Config: operationsTestConfig(), Store: repo}
+	app.Post("/admin/usuarios/:mac/desconectar", desconectarUsuarioHandler(deps, gateway.NoopController{}))
+
+	req := httptest.NewRequest("POST", "/admin/usuarios/AA:BB:CC:DD:EE:FF/desconectar", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(body))
+	}
+	if len(repo.logs) != 1 {
+		t.Fatalf("logs = %+v", repo.logs)
+	}
+	log := repo.logs[0]
+	if log.Nivel != "info" || log.Tipo != "usuarios" || log.Mensagem != "usuario desconectado" {
+		t.Fatalf("log inesperado: %+v", log)
+	}
+	if !strings.Contains(string(log.Detalhes), `"mac":"AA:BB:CC:DD:EE:FF"`) {
+		t.Fatalf("detalhes inesperados: %s", string(log.Detalhes))
+	}
+}
+
 type operationsStore struct{}
 
 func (operationsStore) Settings(context.Context) (store.Settings, error) {
@@ -187,6 +247,23 @@ func (operationsStore) GenerateVouchers(context.Context, store.GenerateVouchersI
 }
 func (operationsStore) Health(context.Context) store.Health {
 	return store.Health{DatabaseStatus: "memory"}
+}
+
+type auditOperationsStore struct {
+	operationsStore
+	logs []store.AdminLogInput
+}
+
+func (s *auditOperationsStore) GenerateVouchers(_ context.Context, input store.GenerateVouchersInput) (store.GenerateVouchersResult, error) {
+	return store.GenerateVouchersResult{
+		LoteID:     7,
+		Quantidade: input.Quantidade,
+	}, nil
+}
+
+func (s *auditOperationsStore) AppendAdminLog(_ context.Context, input store.AdminLogInput) error {
+	s.logs = append(s.logs, input)
+	return nil
 }
 
 func operationsTestConfig() config.Config {

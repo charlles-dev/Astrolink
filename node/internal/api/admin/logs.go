@@ -8,26 +8,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/astrolink/node/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
 
-type OperationalLog struct {
-	Timestamp time.Time       `json:"timestamp"`
-	Nivel     string          `json:"nivel"`
-	Tipo      string          `json:"tipo"`
-	Mensagem  string          `json:"mensagem"`
-	Detalhes  json.RawMessage `json:"detalhes,omitempty"`
-}
+type OperationalLog = store.AdminLog
 
-type OperationalLogFilter struct {
-	Nivel string
-	Tipo  string
-	Texto string
-}
+type OperationalLogFilter = store.AdminLogFilter
 
-type operationLogStore interface {
-	AdminLogs(context.Context, OperationalLogFilter) ([]OperationalLog, error)
-}
+type operationLogStore = store.AdminLogStore
 
 func logsHandler(deps Dependencies) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -75,9 +64,40 @@ func adminLogs(ctx context.Context, deps Dependencies, filter OperationalLogFilt
 		if err != nil {
 			return nil, err
 		}
-		return filterOperationLogs(logs, filter), nil
+		if len(logs) > 0 {
+			return filterOperationLogs(logs, filter), nil
+		}
+		allLogs, err := logStore.AdminLogs(ctx, store.AdminLogFilter{})
+		if err != nil {
+			return nil, err
+		}
+		if len(allLogs) > 0 {
+			return []OperationalLog{}, nil
+		}
 	}
 	return filterOperationLogs(localOperationLogs(time.Now().UTC()), filter), nil
+}
+
+func appendAdminLog(ctx context.Context, deps Dependencies, input store.AdminLogInput) {
+	if deps.Store == nil {
+		return
+	}
+	writer, ok := deps.Store.(store.AdminLogWriter)
+	if !ok {
+		return
+	}
+	_ = writer.AppendAdminLog(ctx, input)
+}
+
+func adminLogDetails(values map[string]any) json.RawMessage {
+	if len(values) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(values)
+	if err != nil {
+		return nil
+	}
+	return raw
 }
 
 func operationLogFilterFromQuery(c *fiber.Ctx) OperationalLogFilter {

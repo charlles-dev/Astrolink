@@ -43,6 +43,15 @@ func desativarVoucherHandler(deps Dependencies) fiber.Handler {
 		if err != nil {
 			return deactivateVoucherAdminError(c, err)
 		}
+		appendAdminLog(c.UserContext(), deps, store.AdminLogInput{
+			Nivel:    "info",
+			Tipo:     "vouchers",
+			Mensagem: "voucher desativado",
+			Detalhes: adminLogDetails(map[string]any{
+				"id":     voucher.ID,
+				"codigo": voucher.Codigo,
+			}),
+		})
 		return c.JSON(fiber.Map{"voucher": voucher})
 	}
 }
@@ -101,6 +110,18 @@ func gerarVouchersHandler(deps Dependencies) fiber.Handler {
 		if err != nil {
 			return voucherAdminError(c, err)
 		}
+		appendAdminLog(c.UserContext(), deps, store.AdminLogInput{
+			Nivel:    "info",
+			Tipo:     "vouchers",
+			Mensagem: "vouchers gerados",
+			Detalhes: adminLogDetails(map[string]any{
+				"plano_id":   body.PlanoID,
+				"quantidade": result.Quantidade,
+				"lote_id":    result.LoteID,
+				"tipo":       body.Tipo,
+				"prefixo":    body.Prefixo,
+			}),
+		})
 		return c.Status(fiber.StatusCreated).JSON(result)
 	}
 }
