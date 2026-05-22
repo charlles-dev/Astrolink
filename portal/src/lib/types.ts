@@ -214,3 +214,66 @@ export interface GenerateAdminVouchersResponse {
   quantidade: number
   vouchers: AdminVoucher[]
 }
+
+export type AdminPaymentStatusFilter = 'pendente' | 'aprovado' | 'cancelado' | 'expirado' | ''
+
+export interface AdminPaymentFilters {
+  status?: AdminPaymentStatusFilter
+  inicio?: string
+  fim?: string
+}
+
+export interface AdminPaymentTotals {
+  pendente: number
+  aprovado: number
+  cancelado: number
+  expirado: number
+  valor_total: string
+}
+
+export interface AdminPayment {
+  txid: string
+  status: string
+  valor: string
+  descricao: string
+  mac: string
+  plano_id: number
+  plano?: {
+    id: number
+    nome: string
+  }
+  created_at: string
+  expira_em: string
+}
+
+export interface AdminPaymentsResponse {
+  total: number
+  totais: AdminPaymentTotals
+  pagamentos: AdminPayment[]
+}
+
+export interface AdminLogFilters {
+  nivel?: string
+  tipo?: string
+  texto?: string
+}
+
+export interface AdminLog {
+  timestamp: string
+  nivel: string
+  tipo: string
+  mensagem: string
+  detalhes?: unknown
+}
+
+export interface AdminLogsResponse {
+  total: number
+  logs: AdminLog[]
+}
+
+export interface AdminBackupResponse {
+  arquivo?: string
+  tamanho_bytes?: number
+  mensagem?: string
+  created_at?: string
+}

@@ -215,6 +215,127 @@ describe('createApiClient', () => {
     )
   })
 
+  it('loads admin payments with filters', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ total: 0, totais: {}, pagamentos: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+    )
+
+    const api = createApiClient('')
+    await api.getAdminPagamentos('token-123', {
+      status: 'aprovado',
+      inicio: '2026-05-01',
+      fim: '2026-05-21'
+    })
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/admin/pagamentos?status=aprovado&inicio=2026-05-01&fim=2026-05-21',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+  })
+
+  it('exports admin payments as CSV with filters', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response('txid,status\npix-1,aprovado\n', {
+          status: 200,
+          headers: { 'content-type': 'text/csv' }
+        })
+      )
+    )
+
+    const api = createApiClient('')
+    const result = await api.exportAdminPagamentos('token-123', {
+      status: 'pendente',
+      inicio: '2026-05-01'
+    })
+
+    expect(result).toBeInstanceOf(Blob)
+    expect(fetch).toHaveBeenCalledWith(
+      '/admin/pagamentos/export.csv?status=pendente&inicio=2026-05-01',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+  })
+
+  it('loads admin logs and exports them as CSV', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ total: 0, logs: [] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' }
+          })
+        )
+        .mockResolvedValueOnce(
+          new Response('timestamp,nivel\n2026-05-21,info\n', {
+            status: 200,
+            headers: { 'content-type': 'text/csv' }
+          })
+        )
+    )
+
+    const api = createApiClient('')
+    await api.getAdminLogs('token-123', { nivel: 'erro', tipo: 'backup', texto: 'falha' })
+    const csv = await api.exportAdminLogs('token-123', { texto: 'pix' })
+
+    expect(csv).toBeInstanceOf(Blob)
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      '/admin/logs?nivel=erro&tipo=backup&texto=falha',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      '/admin/logs/export.csv?texto=pix',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+  })
+
+  it('requests an admin backup', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ mensagem: 'Backup iniciado' }), {
+          status: 202,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+    )
+
+    const api = createApiClient('')
+    const result = await api.createAdminBackup('token-123')
+
+    expect(result.mensagem).toBe('Backup iniciado')
+    expect(fetch).toHaveBeenCalledWith(
+      '/admin/backup',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' }),
+        body: JSON.stringify({})
+      })
+    )
+  })
+
   it('generates admin vouchers', async () => {
     vi.stubGlobal(
       'fetch',

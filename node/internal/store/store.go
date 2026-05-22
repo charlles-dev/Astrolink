@@ -33,6 +33,10 @@ type AdminVoucherOperationalStore interface {
 	DeactivateVoucher(context.Context, int) (AdminVoucher, error)
 }
 
+type AdminPagamentoStore interface {
+	AdminPagamentos(context.Context, AdminPagamentoFilter) ([]AdminPagamento, error)
+}
+
 type AdminAuthStore interface {
 	CreateAdminSession(context.Context, CreateAdminSessionInput) error
 	RotateAdminSession(context.Context, RotateAdminSessionInput) (AdminSession, bool, error)
@@ -108,6 +112,7 @@ type PixTransaction struct {
 	Descricao        string    `json:"descricao"`
 	PixCopiaCola     string    `json:"pix_copia_cola"`
 	QRCodeBase64     string    `json:"qr_code_base64"`
+	CreatedAt        time.Time `json:"created_at,omitempty"`
 	ExpiraEm         time.Time `json:"expira_em"`
 	ExpiraEmSegundos int       `json:"expira_em_segundos"`
 	Status           string    `json:"status,omitempty"`
@@ -147,6 +152,33 @@ type AdminVoucherFilter struct {
 	Codigo  string
 	LoteID  *int
 	Limit   int
+}
+
+type AdminPagamento struct {
+	TXID      string      `json:"txid"`
+	Status    string      `json:"status"`
+	Valor     string      `json:"valor"`
+	Descricao string      `json:"descricao"`
+	MAC       string      `json:"mac"`
+	PlanoID   int         `json:"plano_id"`
+	Plano     PlanoResumo `json:"plano"`
+	CreatedAt time.Time   `json:"created_at"`
+	ExpiraEm  time.Time   `json:"expira_em"`
+}
+
+type AdminPagamentoFilter struct {
+	Status       string
+	Inicio       *time.Time
+	Fim          *time.Time
+	FimExclusive bool
+}
+
+type AdminPixTotals struct {
+	Pendente   int    `json:"pendente"`
+	Aprovado   int    `json:"aprovado"`
+	Cancelado  int    `json:"cancelado"`
+	Expirado   int    `json:"expirado"`
+	ValorTotal string `json:"valor_total"`
 }
 
 type GenerateVouchersInput struct {

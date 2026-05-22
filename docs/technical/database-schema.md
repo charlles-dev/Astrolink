@@ -170,5 +170,5 @@ substituida por JWT/refresh real.
 - Completar CRUD admin para planos/vouchers.
 - Ligar Mercado Pago real.
 - Persistir eventos OpenNDS.
-- Implementar backup/restore.
+- Implementar restore com confirmacao explicita.
 - Separar tabelas cloud em docs proprias quando o cloud voltar para o escopo.

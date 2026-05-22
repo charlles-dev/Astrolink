@@ -20,6 +20,7 @@ Implemented:
 - Portal `/painel` UI for health, users, plans, and voucher generation.
 - Wave 0 split completed in commit `782d5bd`: admin backend handlers are separated by domain, and the admin dashboard is split into panel components under `portal/src/lib/components/admin/`.
 - Wave 1 auth/voucher foundation completed in commit `535ef86`: JWT access tokens, refresh/logout/me endpoints, protected admin routes, session persistence, stale-token panel handling, and advanced voucher generation controls.
+- Wave 2 reporting/reliability completed: admin payment history with CSV export, demo payments provider abstraction, operational logs with CSV export, backup endpoint disabled in memory/dev, and a session-expiration job hook.
 
 Out of scope for this roadmap:
 - Admin cloud.
@@ -264,10 +265,10 @@ Verification per worker:
 
 Run after Wave 1 is merged:
 
-- [ ] Worker E owns Lane E first cut.
-- [ ] Worker F owns Lane F first cut.
-- [ ] Coordinator integrates shared store/API type changes.
-- [ ] Full verification and browser pass.
+- [x] Worker E owns Lane E first cut.
+- [x] Worker F owns Lane F first cut.
+- [x] Coordinator integrates shared store/API type changes.
+- [x] Full verification and browser pass.
 - [ ] Commit: `feat: add local reporting and operations`.
 
 ### Wave 1B: Current Parallel Dispatch
@@ -323,4 +324,4 @@ Run after local admin is operational:
 
 ## Recommended Next Concrete Step
 
-Start with Wave 0. It is the unlocker for safe parallel work and has the lowest product risk. After Wave 0, launch four workers for lanes A-D.
+Move to Wave 3 polish after committing Wave 2. The most useful next slice is the printable/PDF voucher sheet, because payments/logs/backup now give the operator enough local visibility for day-to-day work.

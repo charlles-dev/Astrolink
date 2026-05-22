@@ -1,6 +1,11 @@
 import type {
   GerarPixBody,
   AdminHealthResponse,
+  AdminBackupResponse,
+  AdminLogFilters,
+  AdminLogsResponse,
+  AdminPaymentFilters,
+  AdminPaymentsResponse,
   AdminPlanBody,
   AdminPlanResponse,
   AdminLoginBody,
@@ -38,12 +43,13 @@ export class APIError extends Error {
 }
 
 export function createApiClient(baseURL = '') {
-  function buildQuery(filters?: AdminVoucherFilters) {
+  function buildQuery(filters?: object) {
     const params = new URLSearchParams()
-    if (filters?.status) params.set('status', filters.status)
-    if (filters?.plano_id) params.set('plano_id', String(filters.plano_id))
-    if (filters?.codigo?.trim()) params.set('codigo', filters.codigo.trim())
-    if (filters?.lote_id) params.set('lote_id', String(filters.lote_id))
+    Object.entries(filters ?? {}).forEach(([key, value]: [string, unknown]) => {
+      if (value === undefined || value === null || value === '') return
+      const stringValue = String(value).trim()
+      if (stringValue) params.set(key, stringValue)
+    })
     const query = params.toString()
     return query ? `?${query}` : ''
   }
@@ -137,7 +143,22 @@ export function createApiClient(baseURL = '') {
     exportAdminVouchers: (token: string, filters?: AdminVoucherFilters) =>
       requestBlob(`/admin/vouchers/export.csv${buildQuery(filters)}`, token),
     generateAdminVouchers: (token: string, body: GenerateAdminVouchersBody) =>
-      request<GenerateAdminVouchersResponse>('POST', '/admin/vouchers/gerar', body, token)
+      request<GenerateAdminVouchersResponse>('POST', '/admin/vouchers/gerar', body, token),
+    getAdminPagamentos: (token: string, filters?: AdminPaymentFilters) =>
+      request<AdminPaymentsResponse>(
+        'GET',
+        `/admin/pagamentos${buildQuery(filters)}`,
+        undefined,
+        token
+      ),
+    exportAdminPagamentos: (token: string, filters?: AdminPaymentFilters) =>
+      requestBlob(`/admin/pagamentos/export.csv${buildQuery(filters)}`, token),
+    getAdminLogs: (token: string, filters?: AdminLogFilters) =>
+      request<AdminLogsResponse>('GET', `/admin/logs${buildQuery(filters)}`, undefined, token),
+    exportAdminLogs: (token: string, filters?: AdminLogFilters) =>
+      requestBlob(`/admin/logs/export.csv${buildQuery(filters)}`, token),
+    createAdminBackup: (token: string) =>
+      request<AdminBackupResponse>('POST', '/admin/backup', {}, token)
   }
 }
 

@@ -311,4 +311,119 @@ describe('AdminDashboard', () => {
       codigo: 'VIP'
     })
   })
+
+  it('renders payments and requests filtered export', async () => {
+    const onApplyPaymentFilters = vi.fn()
+    const onExportPayments = vi.fn()
+
+    render(AdminDashboard, {
+      props: {
+        health: null,
+        planos: [],
+        vouchers: [],
+        usuarios: [],
+        pagamentos: [
+          {
+            txid: 'pix-123',
+            status: 'aprovado',
+            valor: '15.00',
+            descricao: 'Acesso 24 Horas',
+            mac: 'AA:BB:CC:DD:EE:FF',
+            plano_id: 1,
+            plano: { id: 1, nome: 'Acesso 24 Horas' },
+            created_at: '2026-05-21T10:00:00Z',
+            expira_em: '2026-05-21T10:30:00Z'
+          }
+        ],
+        pagamentosTotais: {
+          pendente: 1,
+          aprovado: 2,
+          cancelado: 0,
+          expirado: 0,
+          valor_total: '30.00'
+        },
+        loading: false,
+        actionMessage: '',
+        onRefresh: vi.fn(),
+        onDisconnect: vi.fn(),
+        onGenerateVouchers: vi.fn(),
+        onApplyPaymentFilters,
+        onExportPayments,
+        onLogout: vi.fn()
+      }
+    })
+
+    expect(screen.getByRole('heading', { name: 'Pagamentos' })).toBeInTheDocument()
+    expect(screen.getByText('pix-123')).toBeInTheDocument()
+    expect(screen.getByText('R$ 30.00')).toBeInTheDocument()
+
+    await fireEvent.change(screen.getByLabelText('Status do pagamento'), {
+      target: { value: 'aprovado' }
+    })
+    await fireEvent.input(screen.getByLabelText('Inicio'), { target: { value: '2026-05-01' } })
+    await fireEvent.input(screen.getByLabelText('Fim'), { target: { value: '2026-05-21' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Exportar pagamentos CSV' }))
+
+    expect(onExportPayments).toHaveBeenCalledWith({
+      status: 'aprovado',
+      inicio: '2026-05-01',
+      fim: '2026-05-21'
+    })
+  })
+
+  it('renders logs and backup operations', async () => {
+    const onApplyLogFilters = vi.fn()
+    const onExportLogs = vi.fn()
+    const onCreateBackup = vi.fn()
+
+    render(AdminDashboard, {
+      props: {
+        health: null,
+        planos: [],
+        vouchers: [],
+        usuarios: [],
+        logs: [
+          {
+            timestamp: '2026-05-21T10:00:00Z',
+            nivel: 'erro',
+            tipo: 'backup',
+            mensagem: 'Backup indisponivel no modo memory'
+          }
+        ],
+        backupMessage: 'Backup indisponivel neste ambiente',
+        loading: false,
+        actionMessage: '',
+        onRefresh: vi.fn(),
+        onDisconnect: vi.fn(),
+        onGenerateVouchers: vi.fn(),
+        onApplyLogFilters,
+        onExportLogs,
+        onCreateBackup,
+        onLogout: vi.fn()
+      }
+    })
+
+    expect(screen.getByRole('heading', { name: 'Logs' })).toBeInTheDocument()
+    expect(screen.getByText('Backup indisponivel no modo memory')).toBeInTheDocument()
+    expect(screen.getByText('Backup indisponivel neste ambiente')).toBeInTheDocument()
+
+    await fireEvent.change(screen.getByLabelText('Nivel'), { target: { value: 'erro' } })
+    await fireEvent.input(screen.getByLabelText('Tipo'), { target: { value: 'backup' } })
+    await fireEvent.input(screen.getByLabelText('Texto'), { target: { value: 'memory' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros de logs' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Exportar logs CSV' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Gerar backup' }))
+
+    expect(onApplyLogFilters).toHaveBeenCalledWith({
+      nivel: 'erro',
+      tipo: 'backup',
+      texto: 'memory'
+    })
+    expect(onExportLogs).toHaveBeenCalledWith({
+      nivel: 'erro',
+      tipo: 'backup',
+      texto: 'memory'
+    })
+    expect(onCreateBackup).toHaveBeenCalled()
+  })
 })

@@ -275,6 +275,48 @@ Lista todos os planos.
 
 Lista usuarios conhecidos.
 
+### `GET /admin/pagamentos`
+
+Lista historico local de transacoes PIX.
+
+Query params opcionais:
+
+- `status`: `pendente`, `aprovado`, `cancelado`, `expirado` ou `todos`.
+- `inicio`: data `YYYY-MM-DD` ou timestamp RFC3339.
+- `fim`: data `YYYY-MM-DD` ou timestamp RFC3339.
+
+Resposta:
+
+```json
+{
+  "total": 1,
+  "totais": {
+    "pendente": 1,
+    "aprovado": 0,
+    "cancelado": 0,
+    "expirado": 0,
+    "valor_total": "15.00"
+  },
+  "pagamentos": [
+    {
+      "txid": "ast_123",
+      "status": "pendente",
+      "valor": "15.00",
+      "descricao": "Astrolink Wi-Fi - Acesso 24 Horas",
+      "mac": "AA:BB:CC:DD:EE:FF",
+      "plano_id": 2,
+      "plano": { "id": 2, "nome": "Acesso 24 Horas" },
+      "created_at": "2026-05-21T21:24:35Z",
+      "expira_em": "2026-05-21T21:39:35Z"
+    }
+  ]
+}
+```
+
+### `GET /admin/pagamentos/export.csv`
+
+Exporta pagamentos em CSV usando os mesmos filtros de `/admin/pagamentos`.
+
 ### `GET /admin/vouchers`
 
 Lista vouchers emitidos no no local.
@@ -348,13 +390,47 @@ Resposta:
 }
 ```
 
+### `GET /admin/logs`
+
+Lista registros operacionais locais. Quando nao ha store persistente de logs,
+retorna eventos de estado do ambiente local/dev.
+
+Query params opcionais:
+
+- `nivel`: `info`, `aviso` ou `erro`.
+- `tipo`: categoria do evento.
+- `texto`: busca textual simples.
+
+Resposta:
+
+```json
+{
+  "total": 1,
+  "logs": [
+    {
+      "timestamp": "2026-05-21T21:25:00Z",
+      "nivel": "info",
+      "tipo": "sistema",
+      "mensagem": "ambiente local/dev ativo sem log persistente configurado"
+    }
+  ]
+}
+```
+
+### `GET /admin/logs/export.csv`
+
+Exporta logs em CSV usando os mesmos filtros de `/admin/logs`.
+
+### `POST /admin/backup`
+
+Solicita backup manual. No store em memoria retorna `501 backup_indisponivel`,
+porque backup manual depende de Postgres configurado.
+
 ## Backlog da API
 
 - Logs de auditoria para acoes admin.
-- CRUD de planos.
 - Exportacao e impressao de vouchers.
 - Webhook real do Mercado Pago.
-- Relatorios de pagamento.
-- Backup/restore.
+- Restore de backup com confirmacao explicita.
 - WebSocket ou SSE para admin local.
-- Jobs de expiracao e sincronizacao futura.
+- Agendamento automatico de jobs operacionais.

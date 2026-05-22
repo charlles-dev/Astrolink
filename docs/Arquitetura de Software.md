@@ -85,11 +85,13 @@ O fluxo PIX atual e demonstrativo:
 3. Backend gera `txid`, copia-e-cola e QR placeholder.
 4. Portal acompanha status por polling/SSE.
 
-A integracao real com Mercado Pago ainda e backlog.
+A integracao real com Mercado Pago ainda e backlog. O backend ja possui uma
+abstracao `internal/payments.Provider` com provider demo para manter o portal
+offline por padrao enquanto o Mercado Pago real nao e configurado.
 
 ## Expiracao de Sessao
 
-O schema e as APIs ja representam `fim_acesso`, mas o job recorrente que
-desconecta sessoes expiradas ainda precisa ser implementado. A proxima versao do
-backend deve varrer usuarios ativos, chamar `ndsctl deauth` e marcar o status
-como `expirado`.
+O schema e as APIs ja representam `fim_acesso`, e o pacote `internal/jobs`
+expoe o hook `ExpireSessions` para stores que implementem expiracao ativa. A
+ativacao recorrente e a chamada de `ndsctl deauth` permanecem como proximo
+passo operacional.

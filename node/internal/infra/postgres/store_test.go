@@ -91,6 +91,44 @@ func TestStore_PixStatus_NaoEncontrado(t *testing.T) {
 	assertExpectations(t, mock)
 }
 
+func TestStore_AdminPagamentos_FiltraEMapeiaPlano(t *testing.T) {
+	db, mock := newMockDB(t)
+	defer db.Close()
+	repo := postgres.NewStore(db, fixedClock)
+	inicio := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	fim := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	createdAt := time.Date(2026, 5, 21, 3, 0, 0, 0, time.UTC)
+	expiraEm := createdAt.Add(15 * time.Minute)
+
+	rows := sqlmock.NewRows([]string{
+		"txid", "status", "valor", "mac", "plano_id", "created_at", "expira_em", "id", "nome",
+	}).AddRow("ast_123", "pendente", "15.00", "AA:BB:CC:DD:EE:FF", 2, createdAt, expiraEm, 2, "Acesso 24 Horas")
+
+	mock.ExpectQuery("SELECT (.+) FROM transacoes_pix").
+		WithArgs("pendente", inicio, fim).
+		WillReturnRows(rows)
+
+	got, err := repo.AdminPagamentos(context.Background(), store.AdminPagamentoFilter{
+		Status:       "pendente",
+		Inicio:       &inicio,
+		Fim:          &fim,
+		FimExclusive: true,
+	})
+	if err != nil {
+		t.Fatalf("AdminPagamentos() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("AdminPagamentos() len = %d, want 1", len(got))
+	}
+	if got[0].TXID != "ast_123" || got[0].Plano.ID != 2 || got[0].Plano.Nome != "Acesso 24 Horas" {
+		t.Fatalf("pagamento mapeado incorretamente: %+v", got[0])
+	}
+	if got[0].Descricao != "Astrolink Wi-Fi - Acesso 24 Horas" || !got[0].ExpiraEm.Equal(expiraEm) {
+		t.Fatalf("descricao/datas incorretas: %+v", got[0])
+	}
+	assertExpectations(t, mock)
+}
+
 func TestStore_RedeemVoucher_CodigoInexistente(t *testing.T) {
 	db, mock := newMockDB(t)
 	defer db.Close()

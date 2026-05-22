@@ -10,6 +10,7 @@ import (
 
 	"github.com/astrolink/node/internal/domain/planos"
 	"github.com/astrolink/node/internal/domain/vouchers"
+	"github.com/astrolink/node/internal/payments"
 	"github.com/astrolink/node/internal/store"
 )
 
@@ -152,21 +153,32 @@ func (s *Store) SessaoStatus(_ context.Context, mac string) (store.Usuario, erro
 	return usuario, nil
 }
 
-func (s *Store) CreatePix(_ context.Context, input store.CreatePixInput) (store.PixTransaction, error) {
+func (s *Store) CreatePix(ctx context.Context, input store.CreatePixInput) (store.PixTransaction, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	plano, err := s.findPlano(input.PlanoID)
 	if err != nil {
 		return store.PixTransaction{}, err
 	}
-	txid := fmt.Sprintf("ast_%d", time.Now().UnixNano())
+	txid := fmt.Sprintf("ast_%d_%d", time.Now().UnixNano(), len(s.pix)+1)
+	now := time.Now().UTC()
+	pix, err := payments.NewProvider(payments.ProviderDemo).CreatePix(ctx, payments.CreatePixInput{
+		TXID:      txid,
+		Valor:     plano.PrecoFormatado,
+		Descricao: "Astrolink Wi-Fi - " + plano.Nome,
+		ExpiresAt: now.Add(15 * time.Minute),
+	})
+	if err != nil {
+		return store.PixTransaction{}, err
+	}
 	tx := store.PixTransaction{
 		TXID:             txid,
 		Valor:            plano.PrecoFormatado,
 		Descricao:        "Astrolink Wi-Fi - " + plano.Nome,
-		PixCopiaCola:     "00020126580014br.gov.bcb.pix0136astrolink-demo-" + txid,
-		QRCodeBase64:     "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2Ij48cmVjdCB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgZmlsbD0id2hpdGUiLz48dGV4dCB4PSIxMjgiIHk9IjEyOCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iYmxhY2siPkFzdHJvbGluayBQSVg8L3RleHQ+PC9zdmc+",
-		ExpiraEm:         time.Now().Add(15 * time.Minute).UTC(),
+		PixCopiaCola:     pix.PixCopiaCola,
+		QRCodeBase64:     pix.QRCodeBase64,
+		CreatedAt:        now,
+		ExpiraEm:         pix.ExpiresAt,
 		ExpiraEmSegundos: 900,
 		Status:           "pendente",
 		MAC:              normalizeMAC(input.MAC),
@@ -184,6 +196,29 @@ func (s *Store) PixStatus(_ context.Context, txid string) (store.PixTransaction,
 	defer s.mu.RUnlock()
 	tx, ok := s.pix[txid]
 	return tx, ok, nil
+}
+
+func (s *Store) AdminPagamentos(_ context.Context, filter store.AdminPagamentoFilter) ([]store.AdminPagamento, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]store.AdminPagamento, 0, len(s.pix))
+	for _, tx := range s.pix {
+		if !pixMatchesFilter(tx, filter) {
+			continue
+		}
+		plano, err := s.findPlano(tx.PlanoID)
+		if err != nil {
+			continue
+		}
+		result = append(result, adminPagamentoFromPix(tx, plano))
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if !result[i].CreatedAt.Equal(result[j].CreatedAt) {
+			return result[i].CreatedAt.After(result[j].CreatedAt)
+		}
+		return result[i].TXID > result[j].TXID
+	})
+	return result, nil
 }
 
 func (s *Store) RedeemVoucher(_ context.Context, input store.RedeemVoucherInput) (store.RedeemVoucherResult, error) {
@@ -469,6 +504,55 @@ func voucherMatchesFilter(voucher vouchers.Voucher, filter store.AdminVoucherFil
 		}
 	}
 	return true
+}
+
+func pixMatchesFilter(tx store.PixTransaction, filter store.AdminPagamentoFilter) bool {
+	switch strings.ToLower(strings.TrimSpace(filter.Status)) {
+	case "", "todos":
+	case "pendente", "aprovado", "cancelado", "expirado":
+		if tx.Status != strings.ToLower(strings.TrimSpace(filter.Status)) {
+			return false
+		}
+	}
+	if filter.Inicio != nil && tx.CreatedAt.Before(*filter.Inicio) {
+		return false
+	}
+	if filter.Fim != nil {
+		if filter.FimExclusive {
+			if !tx.CreatedAt.Before(*filter.Fim) {
+				return false
+			}
+		} else if tx.CreatedAt.After(*filter.Fim) {
+			return false
+		}
+	}
+	return true
+}
+
+func adminPagamentoFromPix(tx store.PixTransaction, plano planos.Plano) store.AdminPagamento {
+	descricao := tx.Descricao
+	if descricao == "" {
+		descricao = "Astrolink Wi-Fi - " + plano.Nome
+	}
+	createdAt := tx.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = tx.ExpiraEm.Add(-15 * time.Minute)
+	}
+	expiraEm := tx.ExpiraEm
+	if expiraEm.IsZero() {
+		expiraEm = createdAt.Add(15 * time.Minute)
+	}
+	return store.AdminPagamento{
+		TXID:      tx.TXID,
+		Status:    tx.Status,
+		Valor:     tx.Valor,
+		Descricao: descricao,
+		MAC:       tx.MAC,
+		PlanoID:   tx.PlanoID,
+		Plano:     store.PlanoResumo{ID: plano.ID, Nome: plano.Nome},
+		CreatedAt: createdAt,
+		ExpiraEm:  expiraEm,
+	}
 }
 
 func adminVoucherFromDomain(voucher vouchers.Voucher, plano planos.Plano) store.AdminVoucher {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/astrolink/node/internal/domain/planos"
 	"github.com/astrolink/node/internal/domain/vouchers"
+	"github.com/astrolink/node/internal/payments"
 	"github.com/astrolink/node/internal/store"
 )
 
@@ -211,14 +212,24 @@ func (s *Store) CreatePix(ctx context.Context, input store.CreatePixInput) (stor
 		return store.PixTransaction{}, err
 	}
 	now := s.clock().UTC()
-	txid := fmt.Sprintf("ast_%d", now.UnixNano())
+	txid := fmt.Sprintf("ast_%d", time.Now().UnixNano())
+	pix, err := payments.NewProvider(payments.ProviderDemo).CreatePix(ctx, payments.CreatePixInput{
+		TXID:      txid,
+		Valor:     plano.PrecoFormatado,
+		Descricao: "Astrolink Wi-Fi - " + plano.Nome,
+		ExpiresAt: now.Add(15 * time.Minute),
+	})
+	if err != nil {
+		return store.PixTransaction{}, err
+	}
 	tx := store.PixTransaction{
 		TXID:             txid,
 		Valor:            plano.PrecoFormatado,
 		Descricao:        "Astrolink Wi-Fi - " + plano.Nome,
-		PixCopiaCola:     "00020126580014br.gov.bcb.pix0136astrolink-demo-" + txid,
-		QRCodeBase64:     "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2Ij48cmVjdCB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgZmlsbD0id2hpdGUiLz48dGV4dCB4PSIxMjgiIHk9IjEyOCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iYmxhY2siPkFzdHJvbGluayBQSVg8L3RleHQ+PC9zdmc+",
-		ExpiraEm:         now.Add(15 * time.Minute),
+		PixCopiaCola:     pix.PixCopiaCola,
+		QRCodeBase64:     pix.QRCodeBase64,
+		CreatedAt:        now,
+		ExpiraEm:         pix.ExpiresAt,
 		ExpiraEmSegundos: 900,
 		Status:           "pendente",
 		MAC:              normalizeMAC(input.MAC),
@@ -259,12 +270,35 @@ func (s *Store) PixStatus(ctx context.Context, txid string) (store.PixTransactio
 		return store.PixTransaction{}, false, fmt.Errorf("buscar pix: %w", err)
 	}
 	tx.Descricao = "Astrolink Wi-Fi"
+	tx.CreatedAt = createdAt.UTC()
 	tx.ExpiraEm = createdAt.Add(15 * time.Minute).UTC()
 	tx.ExpiraEmSegundos = int(time.Until(tx.ExpiraEm).Seconds())
 	if tx.ExpiraEmSegundos < 0 {
 		tx.ExpiraEmSegundos = 0
 	}
 	return tx, true, nil
+}
+
+func (s *Store) AdminPagamentos(ctx context.Context, filter store.AdminPagamentoFilter) ([]store.AdminPagamento, error) {
+	query, args := adminPagamentosQuery(filter)
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("buscar pagamentos: %w", err)
+	}
+	defer rows.Close()
+
+	var result []store.AdminPagamento
+	for rows.Next() {
+		pagamento, err := scanAdminPagamento(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, pagamento)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterar pagamentos: %w", err)
+	}
+	return result, nil
 }
 
 func (s *Store) RedeemVoucher(ctx context.Context, input store.RedeemVoucherInput) (store.RedeemVoucherResult, error) {
@@ -437,6 +471,41 @@ func adminVouchersQuery(filter store.AdminVoucherFilter) (string, []any) {
 	if filter.Limit > 0 {
 		query += "\n\t\tLIMIT " + addArg(filter.Limit)
 	}
+	return query, args
+}
+
+func adminPagamentosQuery(filter store.AdminPagamentoFilter) (string, []any) {
+	query := `
+		SELECT
+			t.txid, t.status, t.valor::text, t.mac::text, t.plano_id,
+			t.created_at, t.created_at + interval '15 minutes',
+			p.id, p.nome
+		FROM transacoes_pix t
+		LEFT JOIN planos p ON p.id = t.plano_id`
+	clauses := []string{}
+	args := []any{}
+	addArg := func(value any) string {
+		args = append(args, value)
+		return fmt.Sprintf("$%d", len(args))
+	}
+	switch strings.ToLower(strings.TrimSpace(filter.Status)) {
+	case "pendente", "aprovado", "cancelado", "expirado":
+		clauses = append(clauses, "t.status = "+addArg(strings.ToLower(strings.TrimSpace(filter.Status))))
+	}
+	if filter.Inicio != nil {
+		clauses = append(clauses, "t.created_at >= "+addArg(*filter.Inicio))
+	}
+	if filter.Fim != nil {
+		operator := "<="
+		if filter.FimExclusive {
+			operator = "<"
+		}
+		clauses = append(clauses, "t.created_at "+operator+" "+addArg(*filter.Fim))
+	}
+	if len(clauses) > 0 {
+		query += "\n\t\tWHERE " + strings.Join(clauses, " AND ")
+	}
+	query += "\n\t\tORDER BY t.created_at DESC, t.id DESC"
 	return query, args
 }
 
@@ -810,6 +879,35 @@ func scanAdminVoucher(row scanner) (store.AdminVoucher, error) {
 		voucher.LoteID = &value
 	}
 	return voucher, nil
+}
+
+func scanAdminPagamento(row scanner) (store.AdminPagamento, error) {
+	var (
+		pagamento store.AdminPagamento
+		planoID   sql.NullInt64
+		planoNome sql.NullString
+	)
+	if err := row.Scan(
+		&pagamento.TXID,
+		&pagamento.Status,
+		&pagamento.Valor,
+		&pagamento.MAC,
+		&pagamento.PlanoID,
+		&pagamento.CreatedAt,
+		&pagamento.ExpiraEm,
+		&planoID,
+		&planoNome,
+	); err != nil {
+		return store.AdminPagamento{}, err
+	}
+	if planoID.Valid {
+		pagamento.Plano = store.PlanoResumo{ID: int(planoID.Int64), Nome: planoNome.String}
+	}
+	pagamento.Descricao = "Astrolink Wi-Fi"
+	if pagamento.Plano.Nome != "" {
+		pagamento.Descricao += " - " + pagamento.Plano.Nome
+	}
+	return pagamento, nil
 }
 
 func scanAdminSession(row scanner) (store.AdminSession, error) {

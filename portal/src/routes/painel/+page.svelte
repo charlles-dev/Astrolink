@@ -5,8 +5,13 @@
   import AdminDashboard from '$lib/components/AdminDashboard.svelte'
   import type {
     AdminHealthResponse,
+    AdminLog,
+    AdminLogFilters,
     AdminPlanBody,
     AdminLoginResponse,
+    AdminPayment,
+    AdminPaymentFilters,
+    AdminPaymentTotals,
     AdminUser,
     AdminVoucher,
     AdminVoucherFilters,
@@ -23,11 +28,18 @@
   let planos: Plano[] = []
   let usuarios: AdminUser[] = []
   let vouchers: AdminVoucher[] = []
+  let pagamentos: AdminPayment[] = []
+  let pagamentosTotais: AdminPaymentTotals = emptyPaymentTotals()
+  let logs: AdminLog[] = []
+  let logsTotal = 0
   let voucherFilters: AdminVoucherFilters = { status: 'ativo' }
+  let paymentFilters: AdminPaymentFilters = {}
+  let logFilters: AdminLogFilters = {}
   let loading = false
   let loginLoading = false
   let loginError = ''
   let actionMessage = ''
+  let backupMessage = ''
 
   onMount(() => {
     token = sessionStorage.getItem(TOKEN_KEY) || ''
@@ -67,11 +79,37 @@
       planos = nextPlanos.planos
       usuarios = nextUsuarios.usuarios
       vouchers = nextVouchers.vouchers
+      await loadOperations()
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
       actionMessage = messageFromError(error, 'Nao foi possivel carregar o painel')
     } finally {
       loading = false
+    }
+  }
+
+  async function loadOperations() {
+    const [paymentsResult, logsResult] = await Promise.allSettled([
+      api.getAdminPagamentos(token, paymentFilters),
+      api.getAdminLogs(token, logFilters)
+    ])
+
+    if (paymentsResult.status === 'fulfilled') {
+      pagamentos = paymentsResult.value.pagamentos
+      pagamentosTotais = paymentsResult.value.totais
+    } else if (!expireSessionIfUnauthorized(paymentsResult.reason)) {
+      pagamentos = []
+      pagamentosTotais = emptyPaymentTotals()
+      actionMessage = messageFromError(paymentsResult.reason, 'Pagamentos indisponiveis no momento')
+    }
+
+    if (logsResult.status === 'fulfilled') {
+      logs = logsResult.value.logs
+      logsTotal = logsResult.value.total
+    } else if (!expireSessionIfUnauthorized(logsResult.reason)) {
+      logs = []
+      logsTotal = 0
+      actionMessage = messageFromError(logsResult.reason, 'Logs indisponiveis no momento')
     }
   }
 
@@ -158,9 +196,104 @@
     }
   }
 
+  async function applyPaymentFilters(filters: AdminPaymentFilters) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    paymentFilters = filters
+    try {
+      await reloadPayments()
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel carregar pagamentos')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function exportPayments(filters: AdminPaymentFilters) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    paymentFilters = filters
+    try {
+      const csv = await api.exportAdminPagamentos(token, filters)
+      downloadBlob(csv, 'astrolink-pagamentos.csv')
+      actionMessage = 'Exportacao iniciada'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel exportar pagamentos')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function applyLogFilters(filters: AdminLogFilters) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    logFilters = filters
+    try {
+      await reloadLogs()
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel carregar logs')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function exportLogs(filters: AdminLogFilters) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    logFilters = filters
+    try {
+      const csv = await api.exportAdminLogs(token, filters)
+      downloadBlob(csv, 'astrolink-logs.csv')
+      actionMessage = 'Exportacao iniciada'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel exportar logs')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function createBackup() {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    backupMessage = ''
+    try {
+      const result = await api.createAdminBackup(token)
+      backupMessage = result.mensagem || 'Backup solicitado'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      backupMessage = messageFromError(
+        error,
+        'Backup indisponivel neste ambiente. Tente novamente quando o servico estiver ativo.'
+      )
+    } finally {
+      loading = false
+    }
+  }
+
   async function reloadVouchers() {
     const result = await api.getAdminVouchers(token, voucherFilters)
     vouchers = result.vouchers
+  }
+
+  async function reloadPayments() {
+    const result = await api.getAdminPagamentos(token, paymentFilters)
+    pagamentos = result.pagamentos
+    pagamentosTotais = result.totais
+  }
+
+  async function reloadLogs() {
+    const result = await api.getAdminLogs(token, logFilters)
+    logs = result.logs
+    logsTotal = result.total
   }
 
   async function savePlan(input: AdminPlanBody, id?: number) {
@@ -217,7 +350,24 @@
     planos = []
     usuarios = []
     vouchers = []
+    pagamentos = []
+    pagamentosTotais = emptyPaymentTotals()
+    logs = []
+    logsTotal = 0
     voucherFilters = { status: 'ativo' }
+    paymentFilters = {}
+    logFilters = {}
+    backupMessage = ''
+  }
+
+  function emptyPaymentTotals(): AdminPaymentTotals {
+    return {
+      pendente: 0,
+      aprovado: 0,
+      cancelado: 0,
+      expirado: 0,
+      valor_total: '0.00'
+    }
   }
 
   function downloadBlob(blob: Blob, filename: string) {
@@ -252,8 +402,13 @@
     {planos}
     {usuarios}
     {vouchers}
+    {pagamentos}
+    {pagamentosTotais}
+    {logs}
+    {logsTotal}
     {loading}
     {actionMessage}
+    {backupMessage}
     onRefresh={loadDashboard}
     onDisconnect={disconnect}
     onSavePlan={savePlan}
@@ -262,6 +417,11 @@
     onApplyVoucherFilters={applyVoucherFilters}
     onDeactivateVoucher={deactivateVoucher}
     onExportVouchers={exportVouchers}
+    onApplyPaymentFilters={applyPaymentFilters}
+    onExportPayments={exportPayments}
+    onApplyLogFilters={applyLogFilters}
+    onExportLogs={exportLogs}
+    onCreateBackup={createBackup}
     onLogout={logout}
   />
 {:else}

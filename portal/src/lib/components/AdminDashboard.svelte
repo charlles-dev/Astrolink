@@ -1,10 +1,18 @@
 <script lang="ts">
+  import AdminBackupPanel from './admin/AdminBackupPanel.svelte'
+  import AdminLogsPanel from './admin/AdminLogsPanel.svelte'
   import AdminMetrics from './admin/AdminMetrics.svelte'
+  import AdminPaymentsPanel from './admin/AdminPaymentsPanel.svelte'
   import AdminPlansPanel from './admin/AdminPlansPanel.svelte'
   import AdminUsersPanel from './admin/AdminUsersPanel.svelte'
   import AdminVouchersPanel from './admin/AdminVouchersPanel.svelte'
   import type {
     AdminHealthResponse,
+    AdminLog,
+    AdminLogFilters,
+    AdminPayment,
+    AdminPaymentFilters,
+    AdminPaymentTotals,
     AdminPlanBody,
     AdminUser,
     AdminVoucher,
@@ -17,8 +25,19 @@
   export let planos: Plano[] = []
   export let usuarios: AdminUser[] = []
   export let vouchers: AdminVoucher[] = []
+  export let pagamentos: AdminPayment[] = []
+  export let pagamentosTotais: AdminPaymentTotals = {
+    pendente: 0,
+    aprovado: 0,
+    cancelado: 0,
+    expirado: 0,
+    valor_total: '0.00'
+  }
+  export let logs: AdminLog[] = []
+  export let logsTotal = 0
   export let loading = false
   export let actionMessage = ''
+  export let backupMessage = ''
   export let onRefresh: () => void = () => {}
   export let onDisconnect: (mac: string) => void = () => {}
   export let onSavePlan: (input: AdminPlanBody, id?: number) => Promise<void> | void = () => {}
@@ -27,6 +46,11 @@
   export let onApplyVoucherFilters: (filters: AdminVoucherFilters) => void = () => {}
   export let onDeactivateVoucher: (id: number) => void = () => {}
   export let onExportVouchers: (filters: AdminVoucherFilters) => void = () => {}
+  export let onApplyPaymentFilters: (filters: AdminPaymentFilters) => void = () => {}
+  export let onExportPayments: (filters: AdminPaymentFilters) => void = () => {}
+  export let onApplyLogFilters: (filters: AdminLogFilters) => void = () => {}
+  export let onExportLogs: (filters: AdminLogFilters) => void = () => {}
+  export let onCreateBackup: () => void = () => {}
   export let onLogout: () => void = () => {}
 </script>
 
@@ -65,6 +89,27 @@
         {onExportVouchers}
       />
     </aside>
+  </div>
+
+  <div class="operations-content">
+    <AdminPaymentsPanel
+      {pagamentos}
+      totais={pagamentosTotais}
+      {loading}
+      {onApplyPaymentFilters}
+      {onExportPayments}
+    />
+
+    <div class="operations-stack">
+      <AdminLogsPanel
+        {logs}
+        total={logsTotal}
+        {loading}
+        {onApplyLogFilters}
+        {onExportLogs}
+      />
+      <AdminBackupPanel {loading} {backupMessage} {onCreateBackup} />
+    </div>
   </div>
 </section>
 
@@ -160,14 +205,24 @@
     margin-top: 16px;
   }
 
-  .side-stack {
+  .operations-content {
+    max-width: 1180px;
+    margin: 16px auto 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.72fr);
+    gap: 16px;
+  }
+
+  .side-stack,
+  .operations-stack {
     display: grid;
     gap: 16px;
     align-content: start;
   }
 
   @media (max-width: 900px) {
-    .admin-content {
+    .admin-content,
+    .operations-content {
       grid-template-columns: 1fr;
     }
   }
