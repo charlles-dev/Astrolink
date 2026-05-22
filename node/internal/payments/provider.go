@@ -1,6 +1,7 @@
 package payments
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -33,10 +35,11 @@ var (
 )
 
 type CreatePixInput struct {
-	TXID      string
-	Valor     string
-	Descricao string
-	ExpiresAt time.Time
+	TXID       string
+	Valor      string
+	Descricao  string
+	PayerEmail string
+	ExpiresAt  time.Time
 }
 
 type Pix struct {
@@ -68,6 +71,7 @@ type ProviderConfig struct {
 	Name                   string
 	MercadoPagoAccessToken string
 	MercadoPagoAPIBaseURL  string
+	MercadoPagoPayerEmail  string
 	HTTPClient             *http.Client
 }
 
@@ -87,6 +91,7 @@ func NewProvider(cfg ProviderConfig) Provider {
 		return MercadoPagoProvider{
 			AccessToken: token,
 			APIBaseURL:  strings.TrimRight(baseURL, "/"),
+			PayerEmail:  strings.TrimSpace(cfg.MercadoPagoPayerEmail),
 			HTTPClient:  mercadoPagoHTTPClient(cfg.HTTPClient),
 		}
 	default:
@@ -126,11 +131,124 @@ func (DemoProvider) PixStatus(_ context.Context, input StatusQuery) (StatusResul
 type MercadoPagoProvider struct {
 	AccessToken string
 	APIBaseURL  string
+	PayerEmail  string
 	HTTPClient  *http.Client
 }
 
-func (p MercadoPagoProvider) CreatePix(context.Context, CreatePixInput) (Pix, error) {
-	return Pix{}, errors.New("mercadopago CreatePix nao implementado")
+func (p MercadoPagoProvider) CreatePix(ctx context.Context, input CreatePixInput) (Pix, error) {
+	txid := strings.TrimSpace(input.TXID)
+	if txid == "" {
+		return Pix{}, fmt.Errorf("txid obrigatorio")
+	}
+	payerEmail := strings.TrimSpace(input.PayerEmail)
+	if payerEmail == "" {
+		payerEmail = strings.TrimSpace(p.PayerEmail)
+	}
+	if payerEmail == "" {
+		return Pix{}, fmt.Errorf("payer email obrigatorio")
+	}
+	amount, err := parseMercadoPagoAmount(input.Valor)
+	if err != nil {
+		return Pix{}, err
+	}
+
+	payload := mercadoPagoCreatePixRequest{
+		TransactionAmount: amount,
+		Description:       strings.TrimSpace(input.Descricao),
+		PaymentMethodID:   "pix",
+		ExternalReference: txid,
+		Payer: mercadoPagoPayer{
+			Email: payerEmail,
+		},
+	}
+	if !input.ExpiresAt.IsZero() {
+		payload.DateOfExpiration = input.ExpiresAt.Format(time.RFC3339)
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return Pix{}, err
+	}
+
+	endpoint := strings.TrimRight(p.APIBaseURL, "/")
+	if endpoint == "" {
+		endpoint = defaultMercadoPagoAPIBaseURL
+	}
+	endpoint += "/v1/payments"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return Pix{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(p.AccessToken))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Idempotency-Key", txid)
+
+	client := p.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Pix{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return Pix{}, fmt.Errorf("mercadopago CreatePix HTTP %d", resp.StatusCode)
+	}
+
+	var result mercadoPagoCreatePixResponse
+	decoder := json.NewDecoder(resp.Body)
+	if err := decoder.Decode(&result); err != nil {
+		return Pix{}, err
+	}
+	qrCode := strings.TrimSpace(result.PointOfInteraction.TransactionData.QRCode)
+	qrCodeBase64 := strings.TrimSpace(result.PointOfInteraction.TransactionData.QRCodeBase64)
+	if qrCode == "" || qrCodeBase64 == "" {
+		return Pix{}, fmt.Errorf("mercadopago CreatePix resposta sem QR code")
+	}
+	resultTXID := strings.TrimSpace(result.ExternalReference)
+	if resultTXID == "" {
+		resultTXID = txid
+	}
+	return Pix{
+		TXID:         resultTXID,
+		PixCopiaCola: qrCode,
+		QRCodeBase64: qrCodeBase64,
+		ExpiresAt:    input.ExpiresAt,
+	}, nil
+}
+
+type mercadoPagoCreatePixRequest struct {
+	TransactionAmount float64          `json:"transaction_amount"`
+	Description       string           `json:"description,omitempty"`
+	PaymentMethodID   string           `json:"payment_method_id"`
+	Payer             mercadoPagoPayer `json:"payer"`
+	ExternalReference string           `json:"external_reference"`
+	DateOfExpiration  string           `json:"date_of_expiration,omitempty"`
+}
+
+type mercadoPagoPayer struct {
+	Email string `json:"email"`
+}
+
+type mercadoPagoCreatePixResponse struct {
+	ExternalReference  string `json:"external_reference"`
+	PointOfInteraction struct {
+		TransactionData struct {
+			QRCode       string `json:"qr_code"`
+			QRCodeBase64 string `json:"qr_code_base64"`
+		} `json:"transaction_data"`
+	} `json:"point_of_interaction"`
+}
+
+func parseMercadoPagoAmount(value string) (float64, error) {
+	normalized := strings.ReplaceAll(strings.TrimSpace(value), ",", ".")
+	amount, err := strconv.ParseFloat(normalized, 64)
+	if err != nil || amount <= 0 {
+		return 0, fmt.Errorf("valor pix invalido")
+	}
+	return amount, nil
 }
 
 func (p MercadoPagoProvider) PixStatus(ctx context.Context, input StatusQuery) (StatusResult, error) {

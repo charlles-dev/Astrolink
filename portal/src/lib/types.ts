@@ -105,6 +105,7 @@ export interface DeviceInfo {
 export interface AdminLoginBody {
   usuario: string
   senha: string
+  totp_codigo?: string
 }
 
 export interface AdminLoginResponse {

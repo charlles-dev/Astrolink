@@ -28,6 +28,8 @@
 
   let usuario = 'admin'
   let senha = 'admin123'
+  let totpCodigo = ''
+  let showTotp = false
   let token = ''
   let health: AdminHealthResponse | null = null
   let planos: Plano[] = []
@@ -68,12 +70,22 @@
     loginError = ''
     actionMessage = ''
     try {
-      const result: AdminLoginResponse = await api.loginAdmin({ usuario, senha })
+      const code = totpCodigo.trim()
+      const result: AdminLoginResponse = await api.loginAdmin({
+        usuario,
+        senha,
+        ...(showTotp && code ? { totp_codigo: code } : {})
+      })
       token = result.access_token
+      totpCodigo = ''
+      showTotp = false
       sessionStorage.setItem(TOKEN_KEY, token)
       await loadDashboard()
       startLiveEvents()
     } catch (error) {
+      if (error instanceof APIError && error.status === 428 && error.code === 'totp_obrigatorio') {
+        showTotp = true
+      }
       loginError = messageFromError(error, 'Nao foi possivel entrar no painel')
     } finally {
       loginLoading = false
@@ -381,6 +393,8 @@
     resetSession()
     actionMessage = ''
     loginError = ''
+    totpCodigo = ''
+    showTotp = false
   }
 
   function resetSession() {
@@ -609,6 +623,17 @@
           Senha
           <input bind:value={senha} type="password" autocomplete="current-password" />
         </label>
+        {#if showTotp}
+          <label>
+            Codigo 2FA
+            <input
+              bind:value={totpCodigo}
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="8"
+            />
+          </label>
+        {/if}
         {#if loginError}
           <p class="login-error" role="alert">{loginError}</p>
         {/if}

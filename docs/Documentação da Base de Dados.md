@@ -16,7 +16,7 @@ O schema aplicado no banco esta em:
 |---|---|
 | `planos` | Planos vendidos no portal |
 | `usuarios_mac` | Estado de acesso por MAC |
-| `transacoes_pix` | Cobrancas PIX demonstrativas |
+| `transacoes_pix` | Cobrancas PIX locais criadas por provider demo ou Mercado Pago |
 | `voucher_lotes` | Lotes de vouchers gerados |
 | `vouchers` | Codigos de acesso |
 | `voucher_usos` | Historico de resgate de vouchers |

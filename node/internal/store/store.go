@@ -116,10 +116,14 @@ type RoteadorResumo struct {
 }
 
 type CreatePixInput struct {
-	PlanoID int
-	MAC     string
-	IP      string
-	Nome    string
+	PlanoID      int
+	MAC          string
+	IP           string
+	Nome         string
+	TXID         string
+	PixCopiaCola string
+	QRCodeBase64 string
+	ExpiraEm     time.Time
 }
 
 type PixTransaction struct {

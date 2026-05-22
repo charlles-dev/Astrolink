@@ -45,8 +45,10 @@ OpenNDS injeta em producao.
 - Boas-vindas
 - Selecao de planos
 - Voucher
-- PIX demonstrativo
+- PIX via provider demo ou Mercado Pago real, conforme backend
 - Sucesso/acesso liberado
+- Painel local em `/painel`, incluindo login com 2FA sob demanda quando o
+  backend retorna `totp_obrigatorio`
 
 ## APIs Consumidas
 
@@ -61,7 +63,6 @@ OpenNDS injeta em producao.
 ## Proximas Pendencias do Portal
 
 - Refinar estados vazios, loading e erro offline.
-- Finalizar integracao PIX real quando o backend estiver pronto.
 - Adicionar PWA/service worker.
 - Cobrir fluxo completo com Playwright.
 - Preparar personalizacao visual via admin local.

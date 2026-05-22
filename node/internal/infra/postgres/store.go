@@ -212,25 +212,43 @@ func (s *Store) CreatePix(ctx context.Context, input store.CreatePixInput) (stor
 		return store.PixTransaction{}, err
 	}
 	now := s.clock().UTC()
-	txid := fmt.Sprintf("ast_%d", time.Now().UnixNano())
-	pix, err := payments.NewProvider(payments.ProviderConfig{Name: payments.ProviderDemo}).CreatePix(ctx, payments.CreatePixInput{
-		TXID:      txid,
-		Valor:     plano.PrecoFormatado,
-		Descricao: "Astrolink Wi-Fi - " + plano.Nome,
-		ExpiresAt: now.Add(15 * time.Minute),
-	})
-	if err != nil {
-		return store.PixTransaction{}, err
+	txid := strings.TrimSpace(input.TXID)
+	if txid == "" {
+		txid = fmt.Sprintf("ast_%d", time.Now().UnixNano())
+	}
+	expiresAt := input.ExpiraEm
+	if expiresAt.IsZero() {
+		expiresAt = now.Add(15 * time.Minute)
+	}
+	pixCopiaCola := strings.TrimSpace(input.PixCopiaCola)
+	qrCodeBase64 := strings.TrimSpace(input.QRCodeBase64)
+	if pixCopiaCola == "" || qrCodeBase64 == "" {
+		pix, err := payments.NewProvider(payments.ProviderConfig{Name: payments.ProviderDemo}).CreatePix(ctx, payments.CreatePixInput{
+			TXID:      txid,
+			Valor:     plano.PrecoFormatado,
+			Descricao: "Astrolink Wi-Fi - " + plano.Nome,
+			ExpiresAt: expiresAt,
+		})
+		if err != nil {
+			return store.PixTransaction{}, err
+		}
+		pixCopiaCola = pix.PixCopiaCola
+		qrCodeBase64 = pix.QRCodeBase64
+		expiresAt = pix.ExpiresAt
+	}
+	expiresIn := int(expiresAt.Sub(now).Seconds())
+	if expiresIn < 0 {
+		expiresIn = 0
 	}
 	tx := store.PixTransaction{
 		TXID:             txid,
 		Valor:            plano.PrecoFormatado,
 		Descricao:        "Astrolink Wi-Fi - " + plano.Nome,
-		PixCopiaCola:     pix.PixCopiaCola,
-		QRCodeBase64:     pix.QRCodeBase64,
+		PixCopiaCola:     pixCopiaCola,
+		QRCodeBase64:     qrCodeBase64,
 		CreatedAt:        now,
-		ExpiraEm:         pix.ExpiresAt,
-		ExpiraEmSegundos: 900,
+		ExpiraEm:         expiresAt,
+		ExpiraEmSegundos: expiresIn,
 		Status:           "pendente",
 		MAC:              normalizeMAC(input.MAC),
 		PlanoID:          plano.ID,

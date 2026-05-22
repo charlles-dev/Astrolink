@@ -102,7 +102,10 @@ Com sessao:
 
 ### `POST /api/pix/gerar`
 
-Cria cobranca PIX demonstrativa.
+Cria cobranca PIX. Usa o provider demo por padrao; com
+`PAYMENTS_PROVIDER=mercadopago`, `MERCADOPAGO_ACCESS_TOKEN` e
+`MERCADOPAGO_PAYER_EMAIL` configurados, cria a cobranca pela API de pagamentos
+do Mercado Pago.
 
 Body:
 
@@ -244,9 +247,13 @@ Body:
 ```json
 {
   "usuario": "admin",
-  "senha": "admin123"
+  "senha": "admin123",
+  "totp_codigo": "123456"
 }
 ```
+
+`totp_codigo` e opcional e so precisa ser enviado quando `ADMIN_TOTP_SECRET`
+esta configurado.
 
 Resposta:
 
@@ -264,6 +271,9 @@ armazenado como hash, com validade de 30 dias.
 
 Depois de 5 falhas de senha recentes para o mesmo usuario/IP em uma janela de
 15 minutos, a rota retorna `429 login_bloqueado` ate a janela expirar.
+Quando 2FA esta habilitado e o codigo nao foi enviado, retorna
+`428 totp_obrigatorio`; codigo invalido retorna `401 nao_autenticado` e tambem
+conta como falha de login.
 
 ### `POST /admin/auth/refresh`
 
@@ -511,6 +521,4 @@ Erros esperados:
 ## Backlog da API
 
 - Ampliar cobertura de auditoria para fluxos futuros.
-- Criacao PIX real pelo Mercado Pago.
-- 2FA opcional no admin local.
 - Agendamento automatico de jobs operacionais.

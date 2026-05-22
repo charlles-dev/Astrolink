@@ -6,7 +6,7 @@
 - HTTP: Fiber
 - Banco: Postgres ou store em memoria para desenvolvimento rapido
 - Roteador: OpenNDS via SSH/`ndsctl`
-- Pagamentos: provider demo por padrao, provider Mercado Pago para reconciliacao de webhook quando configurado
+- Pagamentos: provider demo por padrao, provider Mercado Pago para criacao PIX real e reconciliacao de webhook quando configurado
 
 Codigo fonte: `node/`
 
@@ -63,10 +63,12 @@ HTTP_ADDR=:5000
 DATABASE_URL=postgres://astrolink:devpassword@localhost:5432/astrolink?sslmode=disable
 ADMIN_USUARIO=admin
 ADMIN_SENHA=admin123
+ADMIN_TOTP_SECRET=
 JWT_SECRET=dev-jwt-secret-nao-usar-em-producao-32chars
 PAYMENTS_PROVIDER=demo
 MERCADOPAGO_ACCESS_TOKEN=TEST-XXXX-XXXX-XXXX
 MERCADOPAGO_API_BASE_URL=
+MERCADOPAGO_PAYER_EMAIL=cliente@example.com
 MERCADOPAGO_WEBHOOK_SECRET=test-webhook-secret
 NODE_NAME=dev-node-01
 OPENNDS_ENABLED=false
@@ -77,11 +79,13 @@ OPENNDS_SSH_KEY_PATH=C:\Users\charl\.ssh\id_ed25519
 OPENNDS_AUTH_RETRIES=3
 ```
 
-Para consultar detalhes reais de pagamento no webhook Mercado Pago, use:
+Para criar PIX real e consultar detalhes de pagamento no webhook Mercado Pago,
+use:
 
 ```env
 PAYMENTS_PROVIDER=mercadopago
 MERCADOPAGO_ACCESS_TOKEN=<access-token>
+MERCADOPAGO_PAYER_EMAIL=<email-do-pagador-padrao>
 MERCADOPAGO_WEBHOOK_SECRET=<webhook-secret>
 ```
 
@@ -102,7 +106,5 @@ por SSH no roteador configurado.
 
 ## Proximas Pendencias do Backend
 
-- Criacao PIX real pelo Mercado Pago.
-- 2FA opcional no admin local.
 - Agendamento automatico de jobs operacionais.
 - Testes E2E com Postgres e OpenNDS simulado.

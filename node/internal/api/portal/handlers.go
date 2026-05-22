@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/astrolink/node/internal/domain/planos"
 	"github.com/astrolink/node/internal/domain/vouchers"
 	"github.com/astrolink/node/internal/gateway"
 	"github.com/astrolink/node/internal/payments"
@@ -90,11 +91,42 @@ func Register(app *fiber.App, deps Dependencies) {
 		if err := c.BodyParser(&body); err != nil {
 			return apiError(c, fiber.StatusBadRequest, "validacao_falhou", "JSON invalido")
 		}
-		tx, err := appStore.CreatePix(requestContext(c), store.CreatePixInput{
-			PlanoID: body.PlanoID,
-			MAC:     body.MAC,
-			IP:      body.IP,
-			Nome:    body.Nome,
+		ctx := requestContext(c)
+		plano, ok, err := findPortalPlano(ctx, appStore, body.PlanoID)
+		if err != nil {
+			return apiError(c, fiber.StatusInternalServerError, "erro_interno", "erro ao carregar plano")
+		}
+		if !ok {
+			return apiError(c, fiber.StatusBadRequest, "validacao_falhou", store.ErrPlanoNotFound.Error())
+		}
+		now := time.Now().UTC()
+		expiresAt := now.Add(15 * time.Minute)
+		txid := newPortalPixTXID()
+		description := "Astrolink Wi-Fi - " + plano.Nome
+		pix, err := paymentProvider.CreatePix(ctx, payments.CreatePixInput{
+			TXID:      txid,
+			Valor:     plano.PrecoFormatado,
+			Descricao: description,
+			ExpiresAt: expiresAt,
+		})
+		if err != nil {
+			return apiError(c, fiber.StatusBadGateway, "provider_indisponivel", "erro ao gerar PIX")
+		}
+		if strings.TrimSpace(pix.TXID) != "" {
+			txid = strings.TrimSpace(pix.TXID)
+		}
+		if !pix.ExpiresAt.IsZero() {
+			expiresAt = pix.ExpiresAt
+		}
+		tx, err := appStore.CreatePix(ctx, store.CreatePixInput{
+			PlanoID:      body.PlanoID,
+			MAC:          body.MAC,
+			IP:           body.IP,
+			Nome:         body.Nome,
+			TXID:         txid,
+			PixCopiaCola: pix.PixCopiaCola,
+			QRCodeBase64: pix.QRCodeBase64,
+			ExpiraEm:     expiresAt,
 		})
 		if err != nil {
 			return apiError(c, fiber.StatusBadRequest, "validacao_falhou", err.Error())
@@ -286,6 +318,23 @@ func stringifyWebhookID(value any) string {
 	default:
 		return ""
 	}
+}
+
+func findPortalPlano(ctx context.Context, appStore store.Store, id int) (planos.Plano, bool, error) {
+	items, err := appStore.PortalPlanos(ctx)
+	if err != nil {
+		return planos.Plano{}, false, err
+	}
+	for _, item := range items {
+		if item.ID == id {
+			return item, true, nil
+		}
+	}
+	return planos.Plano{}, false, nil
+}
+
+func newPortalPixTXID() string {
+	return "ast_" + strconv.FormatInt(time.Now().UnixNano(), 10)
 }
 
 func firstNonEmpty(values ...string) string {

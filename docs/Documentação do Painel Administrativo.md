@@ -23,9 +23,12 @@ As rotas admin, exceto login e refresh, exigem `Authorization: Bearer <access_to
 ```json
 {
   "usuario": "admin",
-  "senha": "admin123"
+  "senha": "admin123",
+  "totp_codigo": "123456"
 }
 ```
+
+`totp_codigo` e enviado apenas quando o 2FA opcional esta habilitado.
 
 Resposta:
 
@@ -43,6 +46,9 @@ armazenado como hash no no local, com validade de 30 dias.
 
 O login aplica bloqueio local por usuario/IP depois de 5 falhas em 15 minutos.
 Enquanto bloqueado, retorna `429 login_bloqueado` e nao cria sessao.
+Quando `ADMIN_TOTP_SECRET` esta configurado, o backend exige `totp_codigo`;
+sem codigo retorna `428 totp_obrigatorio`, e codigo invalido conta como falha
+de login.
 
 `POST /admin/auth/refresh`
 
@@ -169,6 +175,7 @@ executado pela API nesta fase; com confirmacao correta retorna
 O painel local cobre:
 
 - login com access token e refresh token
+- campo 2FA sob demanda quando o backend exige TOTP
 - dashboard de saude
 - tabela de usuarios
 - botao de desconectar usuario
@@ -184,8 +191,6 @@ O painel local cobre:
 
 Evoluir o admin local com:
 
-- 2FA opcional para o admin local
-- criacao PIX real pelo Mercado Pago
 - agendamento automatico de jobs operacionais
 
 O admin cloud continua fora desta fase.

@@ -75,11 +75,13 @@ JWT_SECRET=dev-jwt-secret-nao-usar-em-producao-32chars
 PAYMENTS_PROVIDER=demo
 MERCADOPAGO_ACCESS_TOKEN=TEST-XXXX-XXXX-XXXX
 MERCADOPAGO_API_BASE_URL=
+MERCADOPAGO_PAYER_EMAIL=cliente@example.com
 MERCADOPAGO_WEBHOOK_SECRET=test-webhook-secret
 MP_PUBLIC_KEY=TEST-XXXX-XXXX-XXXX
 
 ADMIN_USUARIO=admin
 ADMIN_SENHA=admin123
+ADMIN_TOTP_SECRET=
 
 NODE_NAME=dev-node-01
 TIMEZONE=America/Sao_Paulo
@@ -135,8 +137,10 @@ make clean         # remove builds locais
 
 O Postgres dev e inicializado com as migrations de `node/migrations/`.
 
-Para webhook Mercado Pago real, altere `PAYMENTS_PROVIDER=mercadopago` e
-configure `MERCADOPAGO_ACCESS_TOKEN` junto com `MERCADOPAGO_WEBHOOK_SECRET`.
+Para PIX Mercado Pago real, altere `PAYMENTS_PROVIDER=mercadopago` e
+configure `MERCADOPAGO_ACCESS_TOKEN`, `MERCADOPAGO_PAYER_EMAIL` e
+`MERCADOPAGO_WEBHOOK_SECRET`. O ambiente local continua offline por padrao com
+`PAYMENTS_PROVIDER=demo`.
 
 Para reiniciar a infra:
 

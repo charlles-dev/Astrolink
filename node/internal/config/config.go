@@ -12,22 +12,25 @@ const (
 	EnvPaymentsProvider       = "PAYMENTS_PROVIDER"
 	EnvMercadoPagoAccessToken = "MERCADOPAGO_ACCESS_TOKEN"
 	EnvMercadoPagoAPIBaseURL  = "MERCADOPAGO_API_BASE_URL"
+	EnvMercadoPagoPayerEmail  = "MERCADOPAGO_PAYER_EMAIL"
 	DefaultPaymentsProvider   = "demo"
 )
 
 type Config struct {
-	Env           string
-	HTTPAddr      string
-	NodeName      string
-	AdminUser     string
-	AdminPassword string
-	JWTSecret     string
-	DatabaseURL   string
-	LogLevel      slog.Level
+	Env             string
+	HTTPAddr        string
+	NodeName        string
+	AdminUser       string
+	AdminPassword   string
+	AdminTOTPSecret string
+	JWTSecret       string
+	DatabaseURL     string
+	LogLevel        slog.Level
 
 	PaymentsProvider         string
 	MercadoPagoAccessToken   string
 	MercadoPagoAPIBaseURL    string
+	MercadoPagoPayerEmail    string
 	MercadoPagoWebhookSecret string
 
 	OpenNDSEnabled bool
@@ -41,18 +44,20 @@ type Config struct {
 
 func FromEnv() Config {
 	return Config{
-		Env:           env("GO_ENV", "development"),
-		HTTPAddr:      env("HTTP_ADDR", ":5000"),
-		NodeName:      env("NODE_NAME", "dev-node-01"),
-		AdminUser:     env("ADMIN_USUARIO", "admin"),
-		AdminPassword: env("ADMIN_SENHA", "admin123"),
-		JWTSecret:     env("JWT_SECRET", "dev-jwt-secret-nao-usar-em-producao-32chars"),
-		DatabaseURL:   env("DATABASE_URL", ""),
-		LogLevel:      parseLogLevel(env("LOG_LEVEL", "info")),
+		Env:             env("GO_ENV", "development"),
+		HTTPAddr:        env("HTTP_ADDR", ":5000"),
+		NodeName:        env("NODE_NAME", "dev-node-01"),
+		AdminUser:       env("ADMIN_USUARIO", "admin"),
+		AdminPassword:   env("ADMIN_SENHA", "admin123"),
+		AdminTOTPSecret: env("ADMIN_TOTP_SECRET", ""),
+		JWTSecret:       env("JWT_SECRET", "dev-jwt-secret-nao-usar-em-producao-32chars"),
+		DatabaseURL:     env("DATABASE_URL", ""),
+		LogLevel:        parseLogLevel(env("LOG_LEVEL", "info")),
 
 		PaymentsProvider:         env(EnvPaymentsProvider, DefaultPaymentsProvider),
 		MercadoPagoAccessToken:   env(EnvMercadoPagoAccessToken, ""),
 		MercadoPagoAPIBaseURL:    env(EnvMercadoPagoAPIBaseURL, ""),
+		MercadoPagoPayerEmail:    env(EnvMercadoPagoPayerEmail, ""),
 		MercadoPagoWebhookSecret: env("MERCADOPAGO_WEBHOOK_SECRET", ""),
 
 		OpenNDSEnabled: parseBool(env("OPENNDS_ENABLED", "false")),

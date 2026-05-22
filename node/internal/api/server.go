@@ -50,6 +50,7 @@ func NewServer(deps Dependencies) *fiber.App {
 			Name:                   deps.Config.PaymentsProvider,
 			MercadoPagoAccessToken: deps.Config.MercadoPagoAccessToken,
 			MercadoPagoAPIBaseURL:  deps.Config.MercadoPagoAPIBaseURL,
+			MercadoPagoPayerEmail:  deps.Config.MercadoPagoPayerEmail,
 		}),
 	})
 	admin.Register(app, admin.Dependencies{

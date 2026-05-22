@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/astrolink/node/internal/api/admin"
+	adminauth "github.com/astrolink/node/internal/auth"
 	"github.com/astrolink/node/internal/config"
 	"github.com/astrolink/node/internal/domain/planos"
 	"github.com/astrolink/node/internal/gateway"
@@ -346,6 +347,111 @@ func TestLogin_RetornaJWTAssinadoERefreshOpaco(t *testing.T) {
 	}
 	if !session.ExpiresAt.After(time.Now().UTC()) {
 		t.Fatalf("expiracao da sessao = %s, want futuro", session.ExpiresAt)
+	}
+}
+
+func TestLogin_ComSecretTOTPExigeCodigo(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{name: "ausente", body: `{"usuario":"admin","senha":"admin123"}`},
+		{name: "em branco", body: `{"usuario":"admin","senha":"admin123","totp_codigo":"   "}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := fiber.New()
+			repo := &fakeStore{}
+			cfg := testConfig()
+			cfg.AdminTOTPSecret = "JBSWY3DPEHPK3PXP"
+			admin.Register(app, admin.Dependencies{
+				Config:  cfg,
+				Store:   repo,
+				Gateway: &fakeGateway{},
+			})
+
+			resp := postAdminLogin(t, app, tc.body)
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+
+			if resp.StatusCode != 428 {
+				t.Fatalf("status = %d body=%s, want 428", resp.StatusCode, string(body))
+			}
+			if !strings.Contains(string(body), "totp_obrigatorio") {
+				t.Fatalf("erro = %s, want totp_obrigatorio", string(body))
+			}
+			if len(repo.createdSessions) != 0 {
+				t.Fatalf("sessoes criadas = %d, want 0", len(repo.createdSessions))
+			}
+			if len(repo.loginFailures[adminLoginFailureKey(store.AdminLoginIdentity{Usuario: "admin", IP: "0.0.0.0"})]) != 1 {
+				t.Fatalf("falhas registradas = %+v, want 1 for missing totp", repo.loginFailures)
+			}
+		})
+	}
+}
+
+func TestLogin_ComSecretTOTPCodigoInvalidoContaFalha(t *testing.T) {
+	app := fiber.New()
+	repo := &fakeStore{}
+	cfg := testConfig()
+	cfg.AdminTOTPSecret = "JBSWY3DPEHPK3PXP"
+	admin.Register(app, admin.Dependencies{
+		Config:  cfg,
+		Store:   repo,
+		Gateway: &fakeGateway{},
+	})
+
+	resp := postAdminLogin(t, app, `{"usuario":"admin","senha":"admin123","totp_codigo":"000000"}`)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != 401 {
+		t.Fatalf("status = %d body=%s, want 401", resp.StatusCode, string(body))
+	}
+	if !strings.Contains(string(body), "codigo 2FA invalido") {
+		t.Fatalf("erro = %s, want codigo 2FA invalido", string(body))
+	}
+	if len(repo.createdSessions) != 0 {
+		t.Fatalf("sessoes criadas = %d, want 0", len(repo.createdSessions))
+	}
+	failures := repo.loginFailures[adminLoginFailureKey(store.AdminLoginIdentity{Usuario: "admin", IP: "0.0.0.0"})]
+	if len(failures) != 1 {
+		t.Fatalf("falhas registradas = %d, want 1", len(failures))
+	}
+}
+
+func TestLogin_ComSecretTOTPCodigoValidoEmiteTokensELimpaFalhas(t *testing.T) {
+	app := fiber.New()
+	identity := store.AdminLoginIdentity{Usuario: "admin", IP: "0.0.0.0"}
+	repo := &fakeStore{
+		loginFailures: map[string][]time.Time{
+			adminLoginFailureKey(identity): []time.Time{time.Now().UTC()},
+		},
+	}
+	cfg := testConfig()
+	cfg.AdminTOTPSecret = "JBSWY3DPEHPK3PXP"
+	admin.Register(app, admin.Dependencies{
+		Config:  cfg,
+		Store:   repo,
+		Gateway: &fakeGateway{},
+	})
+	code, err := adminauth.GenerateTOTPCodeAt(cfg.AdminTOTPSecret, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("GenerateTOTPCodeAt() error = %v", err)
+	}
+
+	resp := postAdminLogin(t, app, `{"usuario":"admin","senha":"admin123","totp_codigo":`+strconvQuote(code)+`}`)
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d body=%s, want 200", resp.StatusCode, string(body))
+	}
+	if len(repo.createdSessions) != 1 {
+		t.Fatalf("sessoes criadas = %d, want 1", len(repo.createdSessions))
+	}
+	if len(repo.loginFailures[adminLoginFailureKey(identity)]) != 0 {
+		t.Fatalf("falhas restantes = %+v, want none", repo.loginFailures)
 	}
 }
 

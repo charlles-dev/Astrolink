@@ -43,6 +43,7 @@ func TestFromEnv_LoadsPaymentProviderConfig(t *testing.T) {
 	t.Setenv("PAYMENTS_PROVIDER", "mercadopago")
 	t.Setenv("MERCADOPAGO_ACCESS_TOKEN", "mp-token")
 	t.Setenv("MERCADOPAGO_API_BASE_URL", "https://api.example.test")
+	t.Setenv("MERCADOPAGO_PAYER_EMAIL", "cliente@example.com")
 
 	cfg := FromEnv()
 
@@ -54,6 +55,19 @@ func TestFromEnv_LoadsPaymentProviderConfig(t *testing.T) {
 	}
 	if cfg.MercadoPagoAPIBaseURL != "https://api.example.test" {
 		t.Fatalf("MercadoPagoAPIBaseURL = %q", cfg.MercadoPagoAPIBaseURL)
+	}
+	if cfg.MercadoPagoPayerEmail != "cliente@example.com" {
+		t.Fatalf("MercadoPagoPayerEmail = %q", cfg.MercadoPagoPayerEmail)
+	}
+}
+
+func TestFromEnv_LoadsAdminTOTPSecret(t *testing.T) {
+	t.Setenv("ADMIN_TOTP_SECRET", "JBSWY3DPEHPK3PXP")
+
+	cfg := FromEnv()
+
+	if cfg.AdminTOTPSecret != "JBSWY3DPEHPK3PXP" {
+		t.Fatalf("AdminTOTPSecret = %q", cfg.AdminTOTPSecret)
 	}
 }
 

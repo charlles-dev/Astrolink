@@ -9,7 +9,7 @@ OpenWrt/OpenNDS. A implementacao atual tem dois servicos principais:
 - Portal cativo em SvelteKit (`portal/`), consumindo a API local.
 
 O painel cloud fica fora desta fase. A prioridade e consolidar o no local:
-portal, vouchers, PIX demonstrativo, admin local e integracao OpenNDS.
+portal, vouchers, PIX por provider, admin local e integracao OpenNDS.
 
 ## Componentes
 
@@ -26,7 +26,7 @@ Responsabilidades atuais:
 - Servir health check em `GET /api/saude`.
 - Expor configuracoes de white-label em `GET /api/settings`.
 - Listar planos em `GET /api/planos`.
-- Criar cobrancas PIX demonstrativas em `POST /api/pix/gerar`.
+- Criar cobrancas PIX por provider demo ou Mercado Pago em `POST /api/pix/gerar`.
 - Consultar status de PIX em `GET /api/pix/status/:txid`.
 - Expor SSE simples em `GET /api/pix/aguardar/:txid`.
 - Aprovar PIX local em desenvolvimento por `POST /api/pix/dev/aprovar/:txid`.
@@ -48,7 +48,7 @@ Responsabilidades atuais:
 - Exibir experiencia visual do portal cativo.
 - Carregar settings e planos da API.
 - Permitir fluxo de voucher.
-- Permitir fluxo PIX demonstrativo.
+- Permitir fluxo PIX por provider demo ou Mercado Pago.
 - Exibir estado de sucesso com tempo de acesso.
 
 ### Banco Local Postgres
@@ -82,12 +82,12 @@ As tabelas principais sao:
 
 ## Fluxo PIX
 
-O fluxo PIX atual continua offline por padrao, mas ja tem pontos de operacao
-para desenvolvimento e para a futura ligacao com Mercado Pago real:
+O fluxo PIX continua offline por padrao com `PAYMENTS_PROVIDER=demo`, mas pode
+criar cobrancas reais quando Mercado Pago esta configurado:
 
 1. Cliente escolhe um plano.
 2. Portal chama `POST /api/pix/gerar`.
-3. Backend gera `txid`, copia-e-cola e QR placeholder pelo provider demo.
+3. Backend gera `txid` e chama o provider configurado para obter copia-e-cola e QR.
 4. Portal acompanha status por polling/SSE.
 5. Em desenvolvimento, `POST /api/pix/dev/aprovar/:txid` simula pagamento
    aprovado sem depender de webhook publico.
@@ -95,10 +95,9 @@ para desenvolvimento e para a futura ligacao com Mercado Pago real:
    consulta o provider de pagamentos e atualiza a transacao local quando o
    status externo for aprovado.
 
-A integracao HTTP real com Mercado Pago ainda e backlog. O backend ja possui
-uma abstracao `internal/payments.Provider`, validacao de webhook e contrato de
-reconciliacao para manter o portal offline por padrao enquanto o provider real
-nao e configurado.
+A integracao HTTP real com Mercado Pago usa `POST /v1/payments`, bearer token,
+idempotencia por `txid`, `payer.email` configurado por env e QR retornado por
+`point_of_interaction.transaction_data`.
 
 ## Operacao Local
 

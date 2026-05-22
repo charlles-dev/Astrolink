@@ -24,6 +24,7 @@ Implemented:
 - Wave 3A polish completed: printable voucher sheet from `/painel`, Mercado Pago webhook signature validation with provider status reconciliation hook, development-only PIX approval endpoint, and protected restore validation that never executes destructive restore.
 - Wave 3B live operations completed: protected admin SSE snapshots, live events panel on `/painel`, and best-effort audit logs for mutating local admin actions.
 - Wave 3C hardening completed: Mercado Pago payment-detail provider, PDF-ready voucher sheet, and 5-failure local admin login lockout.
+- Wave 3D payments/auth completed: real Mercado Pago PIX creation through Payments API, optional local admin TOTP 2FA, and `/painel` login UI for 2FA challenges.
 
 Out of scope for this roadmap:
 - Admin cloud.
@@ -327,7 +328,8 @@ Run after local admin is operational:
 - [x] Highly designed PDF voucher export.
 - [x] Admin SSE event stream with live local dashboard snapshot.
 - [x] Best-effort local audit logs for mutating admin actions.
-- [ ] Optional 2FA.
+- [x] Optional 2FA.
+- [x] Real PIX creation through Mercado Pago Payments API.
 
 ### Wave 3C: Current Parallel Dispatch
 
@@ -377,6 +379,20 @@ Wave 3B verification:
 - Local API verification: admin login, `GET /admin/eventos?once=1`, voucher generation audit log visible in `/admin/logs`.
 - Browser DOM verification on `http://127.0.0.1:5173/painel`: live events panel visible and receiving snapshot state.
 
+### Wave 3D: Current Parallel Dispatch
+
+Run after commit `938eece`:
+
+- [x] Agent Mercado Pago CreatePix owned real `POST /v1/payments` provider implementation and provider tests.
+- [x] Agent Admin TOTP owned optional `ADMIN_TOTP_SECRET`, TOTP helper, backend login enforcement, and auth tests.
+- [x] Agent Frontend 2FA owned `/painel` login challenge UI and focused Svelte tests.
+- [x] Coordinator moved PIX creation out of store demo-only flow, persisted provider-created PIX payloads in memory/Postgres stores, wired `MERCADOPAGO_PAYER_EMAIL`, updated docs, and ran full verification.
+
+Wave 3D verification:
+- `go test ./...` in `node`
+- `npm test`, `npm run check`, and `npm run build` in `portal`
+- Focused provider/admin/portal tests for real PIX creation and 2FA challenge flow.
+
 ## Recommended Next Concrete Step
 
-Move to the next Wave 3 slice after committing Wave 3C. The strongest remaining local slice is optional 2FA for the local admin or real PIX creation through Mercado Pago.
+Move to the next Wave 3 slice after committing Wave 3D. The strongest remaining local slice is operational jobs scheduling and deeper E2E coverage with Postgres/OpenNDS simulation.

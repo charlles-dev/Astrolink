@@ -189,6 +189,54 @@ func TestPixStatus_DepoisDeAprovacaoDevRetornaAprovado(t *testing.T) {
 	}
 }
 
+func TestGerarPix_UsaPaymentProviderConfigurado(t *testing.T) {
+	app := fiber.New()
+	appStore := memory.NewStore()
+	provider := &fakePaymentProvider{
+		createPix: payments.Pix{
+			PixCopiaCola: "pix-real",
+			QRCodeBase64: "qr-real",
+		},
+	}
+	portal.Register(app, portal.Dependencies{
+		Store:           appStore,
+		PaymentProvider: provider,
+	})
+
+	req := httptest.NewRequest("POST", "/api/pix/gerar", strings.NewReader(`{
+		"plano_id": 1,
+		"mac": "AA:BB:CC:DD:EE:FF",
+		"ip": "192.168.1.50",
+		"nome": "Cliente"
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != 201 {
+		t.Fatalf("esperava status 201, got %d body=%s", resp.StatusCode, string(body))
+	}
+	if len(provider.createdInputs) != 1 {
+		t.Fatalf("created inputs len = %d, want 1", len(provider.createdInputs))
+	}
+	if provider.createdInputs[0].TXID == "" {
+		t.Fatal("provider recebeu TXID vazio")
+	}
+	if provider.createdInputs[0].Valor != "5.00" {
+		t.Fatalf("provider Valor = %q, want 5.00", provider.createdInputs[0].Valor)
+	}
+	if provider.createdInputs[0].Descricao != "Astrolink Wi-Fi - Acesso 1 Hora" {
+		t.Fatalf("provider Descricao = %q", provider.createdInputs[0].Descricao)
+	}
+	if !strings.Contains(string(body), `"pix_copia_cola":"pix-real"`) {
+		t.Fatalf("resposta nao contem PIX do provider: %s", string(body))
+	}
+}
+
 func TestPixDevAprovar_ProductionBloqueia(t *testing.T) {
 	app := fiber.New()
 	appStore := &fakeStore{}
@@ -215,7 +263,7 @@ func TestMercadoPagoWebhook_SemSegredoNaoAprova(t *testing.T) {
 	portal.Register(app, portal.Dependencies{
 		Store:           appStore,
 		Env:             "development",
-		PaymentProvider: fakePaymentProvider{status: payments.PixStatusApproved, txid: "ast_paid"},
+		PaymentProvider: &fakePaymentProvider{status: payments.PixStatusApproved, txid: "ast_paid"},
 	})
 
 	req := httptest.NewRequest("POST", "/api/webhooks/mercadopago", strings.NewReader(`{"data":{"id":"123"}}`))
@@ -249,7 +297,7 @@ func TestMercadoPagoWebhook_AssinadoConsultaProviderEAprova(t *testing.T) {
 		Store:                    appStore,
 		Env:                      "production",
 		MercadoPagoWebhookSecret: secret,
-		PaymentProvider:          fakePaymentProvider{status: payments.PixStatusApproved, txid: "ast_paid"},
+		PaymentProvider:          &fakePaymentProvider{status: payments.PixStatusApproved, txid: "ast_paid"},
 	})
 
 	req := httptest.NewRequest("POST", "/api/webhooks/mercadopago", strings.NewReader(`{"data":{"id":"123"}}`))
@@ -289,7 +337,7 @@ func TestMercadoPagoWebhook_AssinadoComIDNumericoGrande(t *testing.T) {
 		Store:                    appStore,
 		Env:                      "production",
 		MercadoPagoWebhookSecret: secret,
-		PaymentProvider:          fakePaymentProvider{status: payments.PixStatusApproved, txid: "ast_big"},
+		PaymentProvider:          &fakePaymentProvider{status: payments.PixStatusApproved, txid: "ast_big"},
 	})
 
 	req := httptest.NewRequest("POST", "/api/webhooks/mercadopago", strings.NewReader(`{"data":{"id":123456789012345678}}`))
@@ -378,12 +426,22 @@ func (f *fakeStore) Health(context.Context) store.Health {
 }
 
 type fakePaymentProvider struct {
-	status payments.PixStatus
-	txid   string
+	status        payments.PixStatus
+	txid          string
+	createPix     payments.Pix
+	createdInputs []payments.CreatePixInput
 }
 
-func (f fakePaymentProvider) CreatePix(context.Context, payments.CreatePixInput) (payments.Pix, error) {
-	return payments.Pix{}, nil
+func (f *fakePaymentProvider) CreatePix(_ context.Context, input payments.CreatePixInput) (payments.Pix, error) {
+	f.createdInputs = append(f.createdInputs, input)
+	result := f.createPix
+	if result.TXID == "" {
+		result.TXID = input.TXID
+	}
+	if result.ExpiresAt.IsZero() {
+		result.ExpiresAt = input.ExpiresAt
+	}
+	return result, nil
 }
 
 func (f fakePaymentProvider) PixStatus(context.Context, payments.StatusQuery) (payments.StatusResult, error) {

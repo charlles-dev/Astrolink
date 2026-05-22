@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"strings"
 	"time"
 
 	adminauth "github.com/astrolink/node/internal/auth"
@@ -16,8 +17,9 @@ const (
 func loginHandler(deps Dependencies) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var body struct {
-			Usuario string `json:"usuario"`
-			Senha   string `json:"senha"`
+			Usuario    string `json:"usuario"`
+			Senha      string `json:"senha"`
+			TOTPCodigo string `json:"totp_codigo"`
 		}
 		if err := c.BodyParser(&body); err != nil {
 			return adminError(c, fiber.StatusBadRequest, "validacao_falhou", "JSON invalido")
@@ -40,12 +42,7 @@ func loginHandler(deps Dependencies) fiber.Handler {
 		}
 		if body.Usuario != deps.Config.AdminUser || body.Senha != deps.Config.AdminPassword {
 			if hasLockoutStore {
-				status, err := lockoutStore.RecordAdminLoginFailure(c.UserContext(), store.AdminLoginFailureInput{
-					Identity: identity,
-					At:       now,
-					Window:   adminLoginLockoutWindow,
-					Limit:    adminLoginLockoutLimit,
-				})
+				status, err := recordAdminLoginFailure(c, lockoutStore, identity, now)
 				if err != nil {
 					return adminError(c, fiber.StatusInternalServerError, "erro_interno", "erro ao registrar falha de login")
 				}
@@ -54,6 +51,26 @@ func loginHandler(deps Dependencies) fiber.Handler {
 				}
 			}
 			return adminError(c, fiber.StatusUnauthorized, "nao_autenticado", "credenciais invalidas")
+		}
+		totpSecret := strings.TrimSpace(deps.Config.AdminTOTPSecret)
+		totpCode := strings.TrimSpace(body.TOTPCodigo)
+		if totpSecret != "" {
+			if totpCode == "" {
+				if hasLockoutStore {
+					if _, err := recordAdminLoginFailure(c, lockoutStore, identity, now); err != nil {
+						return adminError(c, fiber.StatusInternalServerError, "erro_interno", "erro ao registrar falha de login")
+					}
+				}
+				return adminError(c, fiber.StatusPreconditionRequired, "totp_obrigatorio", "codigo 2FA obrigatorio")
+			}
+			if !adminauth.VerifyTOTPCode(totpSecret, totpCode, now) {
+				if hasLockoutStore {
+					if _, err := recordAdminLoginFailure(c, lockoutStore, identity, now); err != nil {
+						return adminError(c, fiber.StatusInternalServerError, "erro_interno", "erro ao registrar falha de login")
+					}
+				}
+				return adminError(c, fiber.StatusUnauthorized, "nao_autenticado", "codigo 2FA invalido")
+			}
 		}
 		authStore, ok := deps.Store.(store.AdminAuthStore)
 		if !ok {
@@ -86,6 +103,15 @@ func loginHandler(deps Dependencies) fiber.Handler {
 		}
 		return authResponse(c, accessToken, refreshToken)
 	}
+}
+
+func recordAdminLoginFailure(c *fiber.Ctx, lockoutStore store.AdminLoginLockoutStore, identity store.AdminLoginIdentity, at time.Time) (store.AdminLoginFailureStatus, error) {
+	return lockoutStore.RecordAdminLoginFailure(c.UserContext(), store.AdminLoginFailureInput{
+		Identity: identity,
+		At:       at,
+		Window:   adminLoginLockoutWindow,
+		Limit:    adminLoginLockoutLimit,
+	})
 }
 
 func refreshHandler(deps Dependencies) fiber.Handler {
