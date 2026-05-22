@@ -396,3 +396,43 @@ Wave 3D verification:
 ## Recommended Next Concrete Step
 
 Move to the next Wave 3 slice after committing Wave 3D. The strongest remaining local slice is operational jobs scheduling and deeper E2E coverage with Postgres/OpenNDS simulation.
+
+## Pending Items To Keep
+
+Keep these queued for the next local-first implementation waves:
+
+- Operational jobs scheduling for session expiration and local maintenance.
+- Deeper E2E coverage with Postgres and simulated OpenNDS.
+- Portal empty/loading/offline states.
+- PWA/service worker for the captive portal.
+- Full Playwright coverage for the local portal and admin panel.
+- Visual personalization from the local admin.
+- Broader audit coverage for future mutable flows.
+- Local setup wizard for personal secrets and `.env` updates, tracked in `docs/superpowers/plans/2026-05-22-local-setup-wizard.md`.
+
+## Local-First Architecture Decision
+
+Prefer local infrastructure and avoid Supabase dependencies as much as practical.
+
+Current direction:
+
+- Use local Go services for auth, jobs, APIs, webhooks, and SSE/live events.
+- Use local Postgres as the primary database, with memory store only for fast development/tests.
+- Use JWT, refresh tokens, lockout, and optional TOTP in the local node instead of external auth.
+- Use local filesystem/Postgres tooling for backups before adding cloud storage.
+- Keep external dependencies limited to domain-specific integrations that cannot reasonably be local, such as Mercado Pago and OpenNDS/router access.
+
+Supabase-style capabilities should be implemented locally first:
+
+- Auth: local admin auth already implemented.
+- Realtime: SSE snapshots already implemented for admin events.
+- Database: local Postgres already implemented.
+- Storage: prefer filesystem or local object storage if needed later.
+- Edge functions: prefer Go handlers/jobs in the node service.
+
+Next local setup direction:
+
+- Provide a CLI wizard as the safest first-install path for writing `.env`.
+- Provide an authenticated admin setup panel that shows redacted config status.
+- Allow web-based `.env` writes only with an explicit local flag such as `ASTROLINK_ALLOW_ENV_WRITE=true`.
+- Require node restart after `.env` changes instead of mutating runtime config silently.
