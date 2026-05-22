@@ -194,8 +194,35 @@ func (s *Store) CreatePix(ctx context.Context, input store.CreatePixInput) (stor
 func (s *Store) PixStatus(_ context.Context, txid string) (store.PixTransaction, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	txid = strings.TrimSpace(txid)
 	tx, ok := s.pix[txid]
+	if !ok {
+		for _, candidate := range s.pix {
+			if candidate.TXID == txid {
+				return candidate, true, nil
+			}
+		}
+	}
 	return tx, ok, nil
+}
+
+func (s *Store) UpdatePixStatus(_ context.Context, input store.UpdatePixStatusInput) (store.PixTransaction, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	txid := strings.TrimSpace(input.TXID)
+	tx, ok := s.pix[txid]
+	if !ok {
+		return store.PixTransaction{}, false, nil
+	}
+	status := strings.ToLower(strings.TrimSpace(input.Status))
+	switch status {
+	case "pendente", "aprovado", "cancelado", "expirado":
+	default:
+		return store.PixTransaction{}, false, fmt.Errorf("status PIX invalido")
+	}
+	tx.Status = status
+	s.pix[txid] = tx
+	return tx, true, nil
 }
 
 func (s *Store) AdminPagamentos(_ context.Context, filter store.AdminPagamentoFilter) ([]store.AdminPagamento, error) {

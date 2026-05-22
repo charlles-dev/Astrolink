@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import type {
     AdminVoucher,
     AdminVoucherFilters,
@@ -6,6 +7,7 @@
     GenerateAdminVouchersBody,
     Plano
   } from '../../types'
+  import AdminVoucherPrintSheet from './AdminVoucherPrintSheet.svelte'
 
   export let planos: Plano[] = []
   export let vouchers: AdminVoucher[] = []
@@ -26,6 +28,7 @@
   let filtroCodigo = ''
   let filtroLoteID = ''
   let confirmDeactivateID: number | null = null
+  let printSheetReady = false
 
   $: if (planos.length > 0 && !planos.some((plano) => plano.id === voucherPlanoID)) {
     voucherPlanoID = planos[0].id
@@ -76,6 +79,17 @@
     onExportVouchers(currentFilters())
   }
 
+  async function printSheet() {
+    if (vouchers.length === 0) return
+
+    printSheetReady = true
+    await tick()
+
+    if (typeof window !== 'undefined' && typeof window.print === 'function') {
+      window.print()
+    }
+  }
+
   function requestDeactivate(voucher: AdminVoucher) {
     if (!voucher.ativo) return
     if (confirmDeactivateID === voucher.id) {
@@ -88,12 +102,13 @@
 </script>
 
 <section class="vouchers-panel" aria-labelledby="vouchers-title">
-  <div class="section-heading">
-    <div>
-      <h2 id="vouchers-title">Vouchers</h2>
-      <p>Codigos para vender em dinheiro.</p>
+  <div class="voucher-operational">
+    <div class="section-heading">
+      <div>
+        <h2 id="vouchers-title">Vouchers</h2>
+        <p>Codigos para vender em dinheiro.</p>
+      </div>
     </div>
-  </div>
 
   <form
     class="voucher-form"
@@ -198,6 +213,14 @@
       <button type="button" class="ghost-button" onclick={exportCsv} disabled={loading}>
         Exportar CSV
       </button>
+      <button
+        type="button"
+        class="ghost-button"
+        onclick={printSheet}
+        disabled={loading || vouchers.length === 0}
+      >
+        Imprimir folha
+      </button>
     </div>
   </form>
 
@@ -239,6 +262,13 @@
       </div>
     {/each}
   </div>
+  </div>
+
+  {#if printSheetReady}
+    <div class="print-shell">
+      <AdminVoucherPrintSheet {vouchers} />
+    </div>
+  {/if}
 </section>
 
 <style>
@@ -335,10 +365,20 @@
 
   .filter-actions {
     justify-content: stretch;
+    flex-wrap: wrap;
   }
 
   .filter-actions button {
     flex: 1;
+    min-width: 132px;
+  }
+
+  .print-shell {
+    position: fixed;
+    top: 0;
+    left: -10000px;
+    width: 210mm;
+    background: white;
   }
 
   .form-grid {
@@ -529,8 +569,48 @@
       flex-direction: column;
     }
 
+    .filter-actions {
+      flex-direction: column;
+    }
+
     .voucher-actions {
       width: 100%;
+    }
+  }
+
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
+  @media print {
+    :global(body *) {
+      visibility: hidden;
+    }
+
+    .vouchers-panel {
+      border: 0;
+      padding: 0;
+      box-shadow: none;
+    }
+
+    .voucher-operational {
+      display: none;
+    }
+
+    .print-shell,
+    .print-shell :global(*) {
+      visibility: visible;
+    }
+
+    .print-shell {
+      position: absolute;
+      inset: 0;
+      display: block;
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      overflow: visible;
     }
   }
 </style>

@@ -100,6 +100,64 @@ func TestBackupHandler_RetornaErroControladoQuandoStoreNaoSuportaBackup(t *testi
 	}
 }
 
+func TestRestoreBackupHandler_ExigeConfirmacaoExata(t *testing.T) {
+	app := fiber.New()
+	deps := Dependencies{Config: operationsTestConfig(), Store: operationsStore{}}
+	app.Post("/admin/backup/restaurar", restoreBackupHandler(deps))
+
+	req := httptest.NewRequest("POST", "/admin/backup/restaurar", strings.NewReader(`{"arquivo":"backup.sql","confirmacao":"restaurar"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(body))
+	}
+	var got struct {
+		Erro     string `json:"erro"`
+		Mensagem string `json:"mensagem"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Erro == "" || !strings.Contains(got.Mensagem, "RESTAURAR") {
+		t.Fatalf("erro inesperado: %+v", got)
+	}
+}
+
+func TestRestoreBackupHandler_RetornaIndisponivelMesmoComConfirmacao(t *testing.T) {
+	app := fiber.New()
+	deps := Dependencies{Config: operationsTestConfig(), Store: operationsStore{}}
+	app.Post("/admin/backup/restaurar", restoreBackupHandler(deps))
+
+	req := httptest.NewRequest("POST", "/admin/backup/restaurar", strings.NewReader(`{"arquivo":"backup.sql","confirmacao":"RESTAURAR"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusNotImplemented {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(body))
+	}
+	var got struct {
+		Erro     string `json:"erro"`
+		Mensagem string `json:"mensagem"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Erro != "restore_indisponivel" || !strings.Contains(got.Mensagem, "Postgres") || !strings.Contains(got.Mensagem, "manual") {
+		t.Fatalf("erro inesperado: %+v", got)
+	}
+}
+
 type operationsStore struct{}
 
 func (operationsStore) Settings(context.Context) (store.Settings, error) {
@@ -115,6 +173,9 @@ func (operationsStore) CreatePix(context.Context, store.CreatePixInput) (store.P
 	return store.PixTransaction{}, nil
 }
 func (operationsStore) PixStatus(context.Context, string) (store.PixTransaction, bool, error) {
+	return store.PixTransaction{}, false, nil
+}
+func (operationsStore) UpdatePixStatus(context.Context, store.UpdatePixStatusInput) (store.PixTransaction, bool, error) {
 	return store.PixTransaction{}, false, nil
 }
 func (operationsStore) RedeemVoucher(context.Context, store.RedeemVoucherInput) (store.RedeemVoucherResult, error) {

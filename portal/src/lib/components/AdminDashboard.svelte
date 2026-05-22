@@ -14,6 +14,7 @@
     AdminPaymentFilters,
     AdminPaymentTotals,
     AdminPlanBody,
+    AdminRestoreBackupBody,
     AdminUser,
     AdminVoucher,
     AdminVoucherFilters,
@@ -51,6 +52,7 @@
   export let onApplyLogFilters: (filters: AdminLogFilters) => void = () => {}
   export let onExportLogs: (filters: AdminLogFilters) => void = () => {}
   export let onCreateBackup: () => void = () => {}
+  export let onRestoreBackup: (input: AdminRestoreBackupBody) => void = () => {}
   export let onLogout: () => void = () => {}
 </script>
 
@@ -108,7 +110,7 @@
         {onApplyLogFilters}
         {onExportLogs}
       />
-      <AdminBackupPanel {loading} {backupMessage} {onCreateBackup} />
+      <AdminBackupPanel {loading} {backupMessage} {onCreateBackup} {onRestoreBackup} />
     </div>
   </div>
 </section>

@@ -375,6 +375,7 @@ describe('AdminDashboard', () => {
     const onApplyLogFilters = vi.fn()
     const onExportLogs = vi.fn()
     const onCreateBackup = vi.fn()
+    const onRestoreBackup = vi.fn()
 
     render(AdminDashboard, {
       props: {
@@ -399,6 +400,7 @@ describe('AdminDashboard', () => {
         onApplyLogFilters,
         onExportLogs,
         onCreateBackup,
+        onRestoreBackup,
         onLogout: vi.fn()
       }
     })
@@ -413,6 +415,13 @@ describe('AdminDashboard', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros de logs' }))
     await fireEvent.click(screen.getByRole('button', { name: 'Exportar logs CSV' }))
     await fireEvent.click(screen.getByRole('button', { name: 'Gerar backup' }))
+    await fireEvent.input(screen.getByLabelText('Arquivo do backup'), {
+      target: { value: 'backup.sql' }
+    })
+    await fireEvent.input(screen.getByLabelText('Confirmacao RESTAURAR'), {
+      target: { value: 'RESTAURAR' }
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Validar restore protegido' }))
 
     expect(onApplyLogFilters).toHaveBeenCalledWith({
       nivel: 'erro',
@@ -425,5 +434,9 @@ describe('AdminDashboard', () => {
       texto: 'memory'
     })
     expect(onCreateBackup).toHaveBeenCalled()
+    expect(onRestoreBackup).toHaveBeenCalledWith({
+      arquivo: 'backup.sql',
+      confirmacao: 'RESTAURAR'
+    })
   })
 })

@@ -64,7 +64,8 @@ Campos principais:
 
 ## `transacoes_pix`
 
-Cobrancas PIX. Nesta fase o PIX e demonstrativo.
+Cobrancas PIX. O provider demo continua padrao local, mas o status pode ser
+atualizado por aprovacao de desenvolvimento ou por webhook Mercado Pago validado.
 
 Campos principais:
 
@@ -161,14 +162,13 @@ Tabela para auditoria. Ainda precisa ser ligada aos fluxos principais.
 
 ## `sessoes_admin`
 
-Base para sessoes de admin. A autenticacao atual ainda e simples e sera
-substituida por JWT/refresh real.
+Base para refresh tokens do admin local. O access token e JWT HS256 de curta
+duracao e o refresh token opaco e armazenado como hash.
 
 ## Pendencias de Schema
 
 - Adicionar migrations incrementais.
-- Completar CRUD admin para planos/vouchers.
-- Ligar Mercado Pago real.
+- Ligar provider HTTP real do Mercado Pago.
 - Persistir eventos OpenNDS.
-- Implementar restore com confirmacao explicita.
+- Persistir logs de auditoria dos fluxos admin.
 - Separar tabelas cloud em docs proprias quando o cloud voltar para o escopo.

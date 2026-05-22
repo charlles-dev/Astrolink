@@ -2,21 +2,29 @@ package portal
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/astrolink/node/internal/domain/vouchers"
 	"github.com/astrolink/node/internal/gateway"
+	"github.com/astrolink/node/internal/payments"
 	"github.com/astrolink/node/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
 
 type Dependencies struct {
-	Store   store.Store
-	Gateway gateway.Controller
-	Logger  *slog.Logger
+	Store                    store.Store
+	Gateway                  gateway.Controller
+	Logger                   *slog.Logger
+	Env                      string
+	MercadoPagoWebhookSecret string
+	PaymentProvider          payments.Provider
 }
 
 func Register(app *fiber.App, deps Dependencies) {
@@ -28,6 +36,14 @@ func Register(app *fiber.App, deps Dependencies) {
 	logger := deps.Logger
 	if logger == nil {
 		logger = slog.Default()
+	}
+	env := strings.ToLower(strings.TrimSpace(deps.Env))
+	if env == "" {
+		env = "development"
+	}
+	paymentProvider := deps.PaymentProvider
+	if paymentProvider == nil {
+		paymentProvider = payments.NewProvider(payments.ProviderDemo)
 	}
 
 	app.Get("/api/settings", func(c *fiber.Ctx) error {
@@ -118,6 +134,68 @@ func Register(app *fiber.App, deps Dependencies) {
 		return nil
 	})
 
+	app.Post("/api/pix/dev/aprovar/:txid", func(c *fiber.Ctx) error {
+		if env != "development" {
+			return apiError(c, fiber.StatusNotFound, "nao_encontrado", "rota nao encontrada")
+		}
+		tx, ok, err := appStore.UpdatePixStatus(requestContext(c), store.UpdatePixStatusInput{
+			TXID:   c.Params("txid"),
+			Status: string(payments.PixStatusApproved),
+		})
+		if err != nil {
+			return apiError(c, fiber.StatusInternalServerError, "erro_interno", "erro ao aprovar PIX")
+		}
+		if !ok {
+			return apiError(c, fiber.StatusNotFound, "nao_encontrado", "transacao PIX nao encontrada")
+		}
+		return c.JSON(fiber.Map{"txid": tx.TXID, "status": tx.Status})
+	})
+
+	app.Post("/api/webhooks/mercadopago", func(c *fiber.Ctx) error {
+		event := parseMercadoPagoWebhook(c)
+		err := (payments.MercadoPagoWebhookVerifier{Secret: deps.MercadoPagoWebhookSecret}).Verify(payments.MercadoPagoWebhookVerification{
+			DataID:    event.PaymentID,
+			RequestID: c.Get("x-request-id"),
+			Signature: c.Get("x-signature"),
+		})
+		if err != nil {
+			if errors.Is(err, payments.ErrWebhookSecretMissing) && env != "production" {
+				logger.Info("webhook Mercado Pago ignorado sem segredo configurado")
+				return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"status": "ignored", "reason": "webhook_secret_missing"})
+			}
+			return apiError(c, fiber.StatusUnauthorized, "assinatura_invalida", "webhook Mercado Pago nao autenticado")
+		}
+
+		result, err := paymentProvider.PixStatus(requestContext(c), payments.StatusQuery{
+			PaymentID: event.PaymentID,
+			TXID:      event.TXID,
+		})
+		if err != nil {
+			return apiError(c, fiber.StatusBadGateway, "provider_indisponivel", "erro ao consultar Mercado Pago")
+		}
+		if result.Status != payments.PixStatusApproved {
+			return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"status": "ignored"})
+		}
+		txid := result.TXID
+		if txid == "" {
+			txid = event.TXID
+		}
+		if txid == "" {
+			return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"status": "ignored", "reason": "txid_missing"})
+		}
+		tx, ok, err := appStore.UpdatePixStatus(requestContext(c), store.UpdatePixStatusInput{
+			TXID:   txid,
+			Status: string(payments.PixStatusApproved),
+		})
+		if err != nil {
+			return apiError(c, fiber.StatusInternalServerError, "erro_interno", "erro ao atualizar PIX")
+		}
+		if !ok {
+			return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"status": "ignored", "reason": "txid_not_found"})
+		}
+		return c.JSON(fiber.Map{"status": "ok", "txid": tx.TXID})
+	})
+
 	app.Post("/api/voucher/resgatar", func(c *fiber.Ctx) error {
 		var body struct {
 			Codigo string `json:"codigo"`
@@ -161,6 +239,62 @@ func Register(app *fiber.App, deps Dependencies) {
 			"roteador_autorizado":      routerAuthorized,
 		})
 	})
+}
+
+type mercadoPagoWebhookEvent struct {
+	PaymentID string
+	TXID      string
+}
+
+func parseMercadoPagoWebhook(c *fiber.Ctx) mercadoPagoWebhookEvent {
+	event := mercadoPagoWebhookEvent{
+		PaymentID: strings.TrimSpace(firstNonEmpty(c.Query("data.id"), c.Query("id"))),
+		TXID:      strings.TrimSpace(c.Query("txid")),
+	}
+	var body struct {
+		ID   any    `json:"id"`
+		TXID string `json:"txid"`
+		Data struct {
+			ID any `json:"id"`
+		} `json:"data"`
+		ExternalReference string `json:"external_reference"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(c.Body()))
+	decoder.UseNumber()
+	if err := decoder.Decode(&body); err == nil {
+		if event.PaymentID == "" {
+			event.PaymentID = stringifyWebhookID(body.Data.ID)
+		}
+		if event.PaymentID == "" {
+			event.PaymentID = stringifyWebhookID(body.ID)
+		}
+		if event.TXID == "" {
+			event.TXID = strings.TrimSpace(firstNonEmpty(body.TXID, body.ExternalReference))
+		}
+	}
+	return event
+}
+
+func stringifyWebhookID(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case float64:
+		return strconv.FormatInt(int64(typed), 10)
+	case json.Number:
+		return strings.TrimSpace(typed.String())
+	default:
+		return ""
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func voucherError(c *fiber.Ctx, err error) error {

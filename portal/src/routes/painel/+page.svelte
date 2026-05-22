@@ -15,6 +15,7 @@
     AdminUser,
     AdminVoucher,
     AdminVoucherFilters,
+    AdminRestoreBackupBody,
     GenerateAdminVouchersBody,
     Plano
   } from '$lib/types'
@@ -279,6 +280,25 @@
     }
   }
 
+  async function restoreBackup(input: AdminRestoreBackupBody) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    backupMessage = ''
+    try {
+      const result = await api.restoreAdminBackup(token, input)
+      backupMessage = result.mensagem || 'Restore validado'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      backupMessage = messageFromError(
+        error,
+        'Restore indisponivel neste ambiente. Nenhuma restauracao foi executada.'
+      )
+    } finally {
+      loading = false
+    }
+  }
+
   async function reloadVouchers() {
     const result = await api.getAdminVouchers(token, voucherFilters)
     vouchers = result.vouchers
@@ -422,6 +442,7 @@
     onApplyLogFilters={applyLogFilters}
     onExportLogs={exportLogs}
     onCreateBackup={createBackup}
+    onRestoreBackup={restoreBackup}
     onLogout={logout}
   />
 {:else}

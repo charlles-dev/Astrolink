@@ -40,9 +40,11 @@ func NewServer(deps Dependencies) *fiber.App {
 	})
 
 	portal.Register(app, portal.Dependencies{
-		Store:   deps.Store,
-		Gateway: deps.Gateway,
-		Logger:  deps.Logger,
+		Store:                    deps.Store,
+		Gateway:                  deps.Gateway,
+		Logger:                   deps.Logger,
+		Env:                      deps.Config.Env,
+		MercadoPagoWebhookSecret: deps.Config.MercadoPagoWebhookSecret,
 	})
 	admin.Register(app, admin.Dependencies{
 		Config:  deps.Config,

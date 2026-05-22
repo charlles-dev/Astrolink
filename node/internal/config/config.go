@@ -18,6 +18,8 @@ type Config struct {
 	DatabaseURL   string
 	LogLevel      slog.Level
 
+	MercadoPagoWebhookSecret string
+
 	OpenNDSEnabled bool
 	OpenNDSHost    string
 	OpenNDSPort    int
@@ -37,6 +39,8 @@ func FromEnv() Config {
 		JWTSecret:     env("JWT_SECRET", "dev-jwt-secret-nao-usar-em-producao-32chars"),
 		DatabaseURL:   env("DATABASE_URL", ""),
 		LogLevel:      parseLogLevel(env("LOG_LEVEL", "info")),
+
+		MercadoPagoWebhookSecret: env("MERCADOPAGO_WEBHOOK_SECRET", ""),
 
 		OpenNDSEnabled: parseBool(env("OPENNDS_ENABLED", "false")),
 		OpenNDSHost:    env("OPENNDS_SSH_HOST", ""),

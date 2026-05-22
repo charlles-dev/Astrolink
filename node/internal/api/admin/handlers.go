@@ -38,6 +38,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	protected.Get("/logs", logsHandler(deps))
 	protected.Get("/logs/export.csv", exportLogsCSVHandler(deps))
 	protected.Post("/backup", backupHandler(deps))
+	protected.Post("/backup/restaurar", restoreBackupHandler(deps))
 	protected.Get("/vouchers", vouchersHandler(deps))
 	protected.Get("/vouchers/export.csv", exportVouchersCSVHandler(deps))
 	protected.Post("/vouchers/gerar", gerarVouchersHandler(deps))

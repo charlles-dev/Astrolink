@@ -29,6 +29,9 @@ Responsabilidades atuais:
 - Criar cobrancas PIX demonstrativas em `POST /api/pix/gerar`.
 - Consultar status de PIX em `GET /api/pix/status/:txid`.
 - Expor SSE simples em `GET /api/pix/aguardar/:txid`.
+- Aprovar PIX local em desenvolvimento por `POST /api/pix/dev/aprovar/:txid`.
+- Receber Webhooks Mercado Pago em `POST /api/webhooks/mercadopago` com
+  validacao HMAC quando o segredo esta configurado.
 - Resgatar vouchers em `POST /api/voucher/resgatar`.
 - Expor endpoints iniciais de admin local.
 - Autorizar/desautorizar MACs no OpenNDS quando habilitado.
@@ -78,16 +81,35 @@ As tabelas principais sao:
 
 ## Fluxo PIX
 
-O fluxo PIX atual e demonstrativo:
+O fluxo PIX atual continua offline por padrao, mas ja tem pontos de operacao
+para desenvolvimento e para a futura ligacao com Mercado Pago real:
 
 1. Cliente escolhe um plano.
 2. Portal chama `POST /api/pix/gerar`.
-3. Backend gera `txid`, copia-e-cola e QR placeholder.
+3. Backend gera `txid`, copia-e-cola e QR placeholder pelo provider demo.
 4. Portal acompanha status por polling/SSE.
+5. Em desenvolvimento, `POST /api/pix/dev/aprovar/:txid` simula pagamento
+   aprovado sem depender de webhook publico.
+6. O endpoint `POST /api/webhooks/mercadopago` valida a assinatura recebida,
+   consulta o provider de pagamentos e atualiza a transacao local quando o
+   status externo for aprovado.
 
-A integracao real com Mercado Pago ainda e backlog. O backend ja possui uma
-abstracao `internal/payments.Provider` com provider demo para manter o portal
-offline por padrao enquanto o Mercado Pago real nao e configurado.
+A integracao HTTP real com Mercado Pago ainda e backlog. O backend ja possui
+uma abstracao `internal/payments.Provider`, validacao de webhook e contrato de
+reconciliacao para manter o portal offline por padrao enquanto o provider real
+nao e configurado.
+
+## Operacao Local
+
+O painel local em `/painel` concentra as acoes de operacao do no:
+
+- CRUD de planos.
+- Usuarios conectados e desconexao via OpenNDS.
+- Vouchers com geracao, filtros, CSV, desativacao e folha impressa.
+- Historico de pagamentos com CSV.
+- Logs operacionais com CSV.
+- Backup manual quando Postgres esta configurado.
+- Validacao protegida de restore, sem executar restore destrutivo pela API.
 
 ## Expiracao de Sessao
 

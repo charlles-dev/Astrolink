@@ -8,6 +8,7 @@ import type {
   AdminPaymentsResponse,
   AdminPlanBody,
   AdminPlanResponse,
+  AdminRestoreBackupBody,
   AdminLoginBody,
   AdminLoginResponse,
   AdminVoucherFilters,
@@ -158,7 +159,9 @@ export function createApiClient(baseURL = '') {
     exportAdminLogs: (token: string, filters?: AdminLogFilters) =>
       requestBlob(`/admin/logs/export.csv${buildQuery(filters)}`, token),
     createAdminBackup: (token: string) =>
-      request<AdminBackupResponse>('POST', '/admin/backup', {}, token)
+      request<AdminBackupResponse>('POST', '/admin/backup', {}, token),
+    restoreAdminBackup: (token: string, body: AdminRestoreBackupBody) =>
+      request<AdminBackupResponse>('POST', '/admin/backup/restaurar', body, token)
   }
 }
 

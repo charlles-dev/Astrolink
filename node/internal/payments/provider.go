@@ -2,12 +2,27 @@ package payments
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
 const (
 	ProviderDemo = "demo"
+
+	PixStatusPending  PixStatus = "pendente"
+	PixStatusApproved PixStatus = "aprovado"
+	PixStatusCanceled PixStatus = "cancelado"
+	PixStatusExpired  PixStatus = "expirado"
+)
+
+var (
+	ErrWebhookSecretMissing = errors.New("mercadopago webhook secret nao configurado")
+	ErrWebhookInvalid       = errors.New("mercadopago webhook invalido")
 )
 
 type CreatePixInput struct {
@@ -24,8 +39,22 @@ type Pix struct {
 	ExpiresAt    time.Time
 }
 
+type PixStatus string
+
+type StatusQuery struct {
+	PaymentID string
+	TXID      string
+}
+
+type StatusResult struct {
+	PaymentID string
+	TXID      string
+	Status    PixStatus
+}
+
 type Provider interface {
 	CreatePix(context.Context, CreatePixInput) (Pix, error)
+	PixStatus(context.Context, StatusQuery) (StatusResult, error)
 }
 
 func NewProvider(name string) Provider {
@@ -49,4 +78,54 @@ func (DemoProvider) CreatePix(_ context.Context, input CreatePixInput) (Pix, err
 		QRCodeBase64: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNTYiIGhlaWdodD0iMjU2Ij48cmVjdCB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiIgZmlsbD0id2hpdGUiLz48dGV4dCB4PSIxMjgiIHk9IjEyOCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iYmxhY2siPkFzdHJvbGluayBQSVg8L3RleHQ+PC9zdmc+",
 		ExpiresAt:    input.ExpiresAt,
 	}, nil
+}
+
+func (DemoProvider) PixStatus(_ context.Context, input StatusQuery) (StatusResult, error) {
+	return StatusResult{
+		PaymentID: input.PaymentID,
+		TXID:      input.TXID,
+		Status:    PixStatusPending,
+	}, nil
+}
+
+type MercadoPagoWebhookVerifier struct {
+	Secret string
+}
+
+type MercadoPagoWebhookVerification struct {
+	DataID    string
+	RequestID string
+	Signature string
+}
+
+func (v MercadoPagoWebhookVerifier) Verify(input MercadoPagoWebhookVerification) error {
+	secret := strings.TrimSpace(v.Secret)
+	if secret == "" {
+		return ErrWebhookSecretMissing
+	}
+	parts := parseSignature(input.Signature)
+	ts := parts["ts"]
+	got := parts["v1"]
+	if ts == "" || got == "" || input.DataID == "" || input.RequestID == "" {
+		return ErrWebhookInvalid
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte("id:" + input.DataID + ";request-id:" + input.RequestID + ";ts:" + ts + ";"))
+	want := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(strings.ToLower(got)), []byte(want)) {
+		return ErrWebhookInvalid
+	}
+	return nil
+}
+
+func parseSignature(header string) map[string]string {
+	result := map[string]string{}
+	for _, part := range strings.Split(header, ",") {
+		key, value, ok := strings.Cut(strings.TrimSpace(part), "=")
+		if !ok {
+			continue
+		}
+		result[strings.TrimSpace(key)] = strings.TrimSpace(value)
+	}
+	return result
 }

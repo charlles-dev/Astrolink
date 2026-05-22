@@ -66,6 +66,18 @@ roteador.
 
 Lista todos os planos cadastrados.
 
+`POST /admin/planos`
+
+Cria plano local.
+
+`PUT /admin/planos/:id`
+
+Atualiza plano local.
+
+`PATCH /admin/planos/:id/status`
+
+Ativa ou desativa plano local.
+
 ### Usuarios
 
 `GET /admin/usuarios`
@@ -82,7 +94,7 @@ Chama o gateway OpenNDS para executar `ndsctl deauth <mac>` quando habilitado.
 
 `GET /admin/vouchers`
 
-Lista os vouchers emitidos, com plano, uso atual, validade, status e lote.
+Lista os vouchers emitidos, com filtros por status, plano, codigo e lote.
 
 `POST /admin/vouchers/gerar`
 
@@ -98,24 +110,68 @@ Gera um lote de vouchers para venda presencial.
 }
 ```
 
+`PATCH /admin/vouchers/:id/desativar`
+
+Desativa voucher ainda ativo.
+
+`GET /admin/vouchers/export.csv`
+
+Exporta os vouchers filtrados em CSV. A tela tambem oferece impressao de folha
+de vouchers a partir da lista atual.
+
+### Pagamentos
+
+`GET /admin/pagamentos`
+
+Lista historico local de cobrancas PIX e totais por status.
+
+`GET /admin/pagamentos/export.csv`
+
+Exporta pagamentos filtrados em CSV.
+
+### Logs
+
+`GET /admin/logs`
+
+Lista eventos operacionais locais.
+
+`GET /admin/logs/export.csv`
+
+Exporta logs filtrados em CSV.
+
+### Backup e Restore
+
+`POST /admin/backup`
+
+Solicita backup manual. No store em memoria retorna `501 backup_indisponivel`.
+
+`POST /admin/backup/restaurar`
+
+Valida `arquivo` e confirmacao literal `RESTAURAR`. O restore destrutivo nao e
+executado pela API nesta fase; com confirmacao correta retorna
+`501 restore_indisponivel`.
+
 ## Tela Implementada
 
-O painel local inicial cobre:
+O painel local cobre:
 
-- login simples
+- login com access token e refresh token
 - dashboard de saude
 - tabela de usuarios
 - botao de desconectar usuario
-- lista de planos
-- geracao e listagem de vouchers, incluindo validade e tipo universal
+- CRUD de planos
+- geracao, filtros, CSV, desativacao e impressao de vouchers
+- historico de pagamentos e exportacao CSV
+- logs operacionais e exportacao CSV
+- backup manual e validacao protegida de restore
 
 ## Proxima Etapa Recomendada
 
 Evoluir o admin local com:
 
-- CRUD de planos
-- exportacao/impressao de vouchers
-- status real do roteador
+- SSE/WebSocket de eventos ao vivo
+- provider real do Mercado Pago
+- template PDF desenhado para vouchers
 - logs de auditoria
 
 O admin cloud continua fora desta fase.

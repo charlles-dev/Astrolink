@@ -21,6 +21,7 @@ Implemented:
 - Wave 0 split completed in commit `782d5bd`: admin backend handlers are separated by domain, and the admin dashboard is split into panel components under `portal/src/lib/components/admin/`.
 - Wave 1 auth/voucher foundation completed in commit `535ef86`: JWT access tokens, refresh/logout/me endpoints, protected admin routes, session persistence, stale-token panel handling, and advanced voucher generation controls.
 - Wave 2 reporting/reliability completed: admin payment history with CSV export, demo payments provider abstraction, operational logs with CSV export, backup endpoint disabled in memory/dev, and a session-expiration job hook.
+- Wave 3A polish completed: printable voucher sheet from `/painel`, Mercado Pago webhook signature validation with provider status reconciliation hook, development-only PIX approval endpoint, and protected restore validation that never executes destructive restore.
 
 Out of scope for this roadmap:
 - Admin cloud.
@@ -269,7 +270,7 @@ Run after Wave 1 is merged:
 - [x] Worker F owns Lane F first cut.
 - [x] Coordinator integrates shared store/API type changes.
 - [x] Full verification and browser pass.
-- [ ] Commit: `feat: add local reporting and operations`.
+- [x] Commit: `feat: add local reporting and operations`.
 
 ### Wave 1B: Current Parallel Dispatch
 
@@ -316,12 +317,31 @@ Plan CRUD contract for this repository:
 
 Run after local admin is operational:
 
-- [ ] Printable/PDF voucher sheet.
-- [ ] Mercado Pago real webhook and reconciliation.
-- [ ] Backup restore with explicit confirmation workflow.
+- [x] Printable voucher sheet from the admin voucher list.
+- [x] Mercado Pago webhook validation and reconciliation hook.
+- [x] Development-only PIX approval endpoint behind `GO_ENV=development`.
+- [x] Backup restore explicit confirmation workflow, implemented as safe validation only.
+- [ ] Real Mercado Pago provider client for payment detail fetches.
+- [ ] Highly designed PDF voucher export.
 - [ ] Admin WebSocket/SSE event stream.
 - [ ] Optional 2FA.
 
+### Wave 3A: Current Parallel Dispatch
+
+Run after commit `71b8ff3`:
+
+- [x] Agent Voucher Print owned the printable voucher sheet UI, print-only component, and focused panel tests.
+- [x] Agent Mercado Pago Backend owned webhook signature validation, provider status contract, development PIX approval, and store status updates.
+- [x] Agent Restore Seguro owned the protected restore request path, admin UI form, API client method, and safety tests.
+- [x] Coordinator integrated shared routes/types, added exact numeric webhook ID parsing, updated docs, and ran full verification.
+
+Wave 3A verification:
+- `go test ./...` in `node`
+- `npm test`, `npm run check`, and `npm run build` in `portal`
+- `git diff --check`
+- Browser DOM verification on `http://127.0.0.1:5173/painel`: voucher print action, restore protected form, and admin dashboard render.
+- Local API verification: admin login, PIX create, development approval, PIX status approved, Mercado Pago webhook without secret ignored in development, restore wrong confirmation rejected, restore confirmed returns safe `501 restore_indisponivel`.
+
 ## Recommended Next Concrete Step
 
-Move to Wave 3 polish after committing Wave 2. The most useful next slice is the printable/PDF voucher sheet, because payments/logs/backup now give the operator enough local visibility for day-to-day work.
+Move to the next Wave 3 slice after committing Wave 3A. The strongest next slice is admin SSE/live events, because payments, logs, backup validation, router diagnostics, vouchers, and plans already have usable local operator screens.

@@ -504,6 +504,9 @@ func (fakeStore) CreatePix(context.Context, store.CreatePixInput) (store.PixTran
 func (fakeStore) PixStatus(context.Context, string) (store.PixTransaction, bool, error) {
 	return store.PixTransaction{}, false, nil
 }
+func (fakeStore) UpdatePixStatus(context.Context, store.UpdatePixStatusInput) (store.PixTransaction, bool, error) {
+	return store.PixTransaction{}, false, nil
+}
 func (fakeStore) RedeemVoucher(context.Context, store.RedeemVoucherInput) (store.RedeemVoucherResult, error) {
 	return store.RedeemVoucherResult{}, nil
 }

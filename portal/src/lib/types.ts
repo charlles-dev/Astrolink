@@ -277,3 +277,8 @@ export interface AdminBackupResponse {
   mensagem?: string
   created_at?: string
 }
+
+export interface AdminRestoreBackupBody {
+  arquivo: string
+  confirmacao: string
+}

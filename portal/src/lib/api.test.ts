@@ -336,6 +336,40 @@ describe('createApiClient', () => {
     )
   })
 
+  it('requests a protected admin restore', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ erro: 'restore_indisponivel', mensagem: 'Restore protegido' }), {
+          status: 501,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+    )
+
+    const api = createApiClient('')
+
+    await expect(
+      api.restoreAdminBackup('token-123', {
+        arquivo: 'backup.sql',
+        confirmacao: 'RESTAURAR'
+      })
+    ).rejects.toMatchObject({
+      status: 501,
+      code: 'restore_indisponivel',
+      message: 'Restore protegido'
+    } satisfies Partial<APIError>)
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/admin/backup/restaurar',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' }),
+        body: JSON.stringify({ arquivo: 'backup.sql', confirmacao: 'RESTAURAR' })
+      })
+    )
+  })
+
   it('generates admin vouchers', async () => {
     vi.stubGlobal(
       'fetch',

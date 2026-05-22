@@ -254,6 +254,7 @@ func (s *Store) CreatePix(ctx context.Context, input store.CreatePixInput) (stor
 }
 
 func (s *Store) PixStatus(ctx context.Context, txid string) (store.PixTransaction, bool, error) {
+	txid = strings.TrimSpace(txid)
 	var (
 		tx        store.PixTransaction
 		createdAt time.Time
@@ -268,6 +269,41 @@ func (s *Store) PixStatus(ctx context.Context, txid string) (store.PixTransactio
 	}
 	if err != nil {
 		return store.PixTransaction{}, false, fmt.Errorf("buscar pix: %w", err)
+	}
+	tx.Descricao = "Astrolink Wi-Fi"
+	tx.CreatedAt = createdAt.UTC()
+	tx.ExpiraEm = createdAt.Add(15 * time.Minute).UTC()
+	tx.ExpiraEmSegundos = int(time.Until(tx.ExpiraEm).Seconds())
+	if tx.ExpiraEmSegundos < 0 {
+		tx.ExpiraEmSegundos = 0
+	}
+	return tx, true, nil
+}
+
+func (s *Store) UpdatePixStatus(ctx context.Context, input store.UpdatePixStatusInput) (store.PixTransaction, bool, error) {
+	status := strings.ToLower(strings.TrimSpace(input.Status))
+	txid := strings.TrimSpace(input.TXID)
+	switch status {
+	case "pendente", "aprovado", "cancelado", "expirado":
+	default:
+		return store.PixTransaction{}, false, fmt.Errorf("status PIX invalido")
+	}
+	var (
+		tx        store.PixTransaction
+		createdAt time.Time
+	)
+	err := s.db.QueryRowContext(ctx, `
+		UPDATE transacoes_pix
+		SET status = $1, webhook_at = $3, updated_at = $3
+		WHERE txid = $2
+		RETURNING txid, valor::text, status, COALESCE(pix_copia_cola, ''), COALESCE(qr_code_base64, ''), created_at, mac::text, plano_id`,
+		status, txid, s.clock().UTC()).
+		Scan(&tx.TXID, &tx.Valor, &tx.Status, &tx.PixCopiaCola, &tx.QRCodeBase64, &createdAt, &tx.MAC, &tx.PlanoID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.PixTransaction{}, false, nil
+	}
+	if err != nil {
+		return store.PixTransaction{}, false, fmt.Errorf("atualizar status pix: %w", err)
 	}
 	tx.Descricao = "Astrolink Wi-Fi"
 	tx.CreatedAt = createdAt.UTC()

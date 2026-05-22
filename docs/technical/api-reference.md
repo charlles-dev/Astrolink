@@ -143,6 +143,48 @@ Resposta:
 }
 ```
 
+### `POST /api/pix/dev/aprovar/:txid`
+
+Aprova uma cobranca PIX localmente apenas quando `GO_ENV=development`. Em
+producao, a rota retorna `404`.
+
+Resposta:
+
+```json
+{
+  "txid": "ast_123",
+  "status": "aprovado"
+}
+```
+
+### `POST /api/webhooks/mercadopago`
+
+Recebe notificacoes Webhook do Mercado Pago. Quando
+`MERCADOPAGO_WEBHOOK_SECRET` esta configurado, valida `x-signature` com
+`x-request-id`, consulta o provider de pagamentos e atualiza a transacao local
+somente quando o provider retorna status `aprovado`.
+
+Headers esperados:
+
+```text
+x-request-id: bb56a2f1-6aae-46ac-982e-9dcd3581d08e
+x-signature: ts=1742505638683,v1=<hmac>
+```
+
+Body minimo:
+
+```json
+{
+  "data": {
+    "id": "123456"
+  },
+  "external_reference": "ast_123"
+}
+```
+
+Em desenvolvimento sem segredo configurado, retorna `202` com status
+`ignored` e nao altera transacoes locais.
+
 ### `GET /api/pix/aguardar/:txid`
 
 Stream SSE simples para status do PIX.
@@ -426,11 +468,32 @@ Exporta logs em CSV usando os mesmos filtros de `/admin/logs`.
 Solicita backup manual. No store em memoria retorna `501 backup_indisponivel`,
 porque backup manual depende de Postgres configurado.
 
+### `POST /admin/backup/restaurar`
+
+Valida uma solicitacao de restore com confirmacao explicita. Por seguranca,
+nenhum restore destrutivo e executado pela API nesta fase; mesmo com confirmacao
+correta a rota retorna `501 restore_indisponivel`.
+
+Body:
+
+```json
+{
+  "arquivo": "backup.sql",
+  "confirmacao": "RESTAURAR"
+}
+```
+
+Erros esperados:
+
+| Status | `erro` | Caso |
+|---|---|---|
+| 400 | `confirmacao_invalida` | arquivo vazio ou confirmacao diferente de `RESTAURAR` |
+| 501 | `restore_indisponivel` | pedido validado, mas restore real permanece manual/Postgres |
+
 ## Backlog da API
 
 - Logs de auditoria para acoes admin.
-- Exportacao e impressao de vouchers.
-- Webhook real do Mercado Pago.
-- Restore de backup com confirmacao explicita.
+- Provider real do Mercado Pago para buscar detalhes de pagamento.
+- Exportacao PDF desenhada para vouchers.
 - WebSocket ou SSE para admin local.
 - Agendamento automatico de jobs operacionais.

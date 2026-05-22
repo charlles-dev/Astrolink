@@ -22,6 +22,7 @@ type Store interface {
 	SessaoStatus(context.Context, string) (Usuario, error)
 	CreatePix(context.Context, CreatePixInput) (PixTransaction, error)
 	PixStatus(context.Context, string) (PixTransaction, bool, error)
+	UpdatePixStatus(context.Context, UpdatePixStatusInput) (PixTransaction, bool, error)
 	RedeemVoucher(context.Context, RedeemVoucherInput) (RedeemVoucherResult, error)
 	AdminVouchers(context.Context) ([]AdminVoucher, error)
 	GenerateVouchers(context.Context, GenerateVouchersInput) (GenerateVouchersResult, error)
@@ -118,6 +119,11 @@ type PixTransaction struct {
 	Status           string    `json:"status,omitempty"`
 	MAC              string    `json:"-"`
 	PlanoID          int       `json:"-"`
+}
+
+type UpdatePixStatusInput struct {
+	TXID   string
+	Status string
 }
 
 type RedeemVoucherInput struct {

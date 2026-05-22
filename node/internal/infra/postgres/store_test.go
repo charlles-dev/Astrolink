@@ -91,6 +91,36 @@ func TestStore_PixStatus_NaoEncontrado(t *testing.T) {
 	assertExpectations(t, mock)
 }
 
+func TestStore_UpdatePixStatus_AtualizaPorTXID(t *testing.T) {
+	db, mock := newMockDB(t)
+	defer db.Close()
+	repo := postgres.NewStore(db, fixedClock)
+	createdAt := time.Date(2026, 5, 21, 3, 0, 0, 0, time.UTC)
+
+	rows := sqlmock.NewRows([]string{
+		"txid", "valor", "status", "pix_copia_cola", "qr_code_base64", "created_at", "mac", "plano_id",
+	}).AddRow("ast_123", "15.00", "aprovado", "pix", "qr", createdAt, "AA:BB:CC:DD:EE:FF", 2)
+
+	mock.ExpectQuery("UPDATE transacoes_pix").
+		WithArgs("aprovado", "ast_123", fixedClock().UTC()).
+		WillReturnRows(rows)
+
+	got, ok, err := repo.UpdatePixStatus(context.Background(), store.UpdatePixStatusInput{
+		TXID:   "ast_123",
+		Status: "aprovado",
+	})
+	if err != nil {
+		t.Fatalf("UpdatePixStatus() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("UpdatePixStatus() ok = false, want true")
+	}
+	if got.TXID != "ast_123" || got.Status != "aprovado" {
+		t.Fatalf("transacao mapeada incorretamente: %+v", got)
+	}
+	assertExpectations(t, mock)
+}
+
 func TestStore_AdminPagamentos_FiltraEMapeiaPlano(t *testing.T) {
 	db, mock := newMockDB(t)
 	defer db.Close()

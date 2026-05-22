@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -17,6 +18,11 @@ type BackupResult struct {
 	CreatedAt string `json:"created_at,omitempty"`
 }
 
+type restoreBackupRequest struct {
+	Arquivo     string `json:"arquivo"`
+	Confirmacao string `json:"confirmacao"`
+}
+
 func backupHandler(deps Dependencies) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		backupStore, ok := deps.Store.(backupStore)
@@ -28,5 +34,18 @@ func backupHandler(deps Dependencies) fiber.Handler {
 			return adminError(c, fiber.StatusInternalServerError, "erro_interno", "erro ao criar backup")
 		}
 		return c.JSON(result)
+	}
+}
+
+func restoreBackupHandler(deps Dependencies) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		var body restoreBackupRequest
+		if err := c.BodyParser(&body); err != nil {
+			return adminError(c, fiber.StatusBadRequest, "requisicao_invalida", "informe arquivo e confirmacao RESTAURAR")
+		}
+		if strings.TrimSpace(body.Arquivo) == "" || body.Confirmacao != "RESTAURAR" {
+			return adminError(c, fiber.StatusBadRequest, "confirmacao_invalida", "para validar restore, informe arquivo e confirmacao RESTAURAR")
+		}
+		return adminError(c, fiber.StatusNotImplemented, "restore_indisponivel", "restore real exige procedimento manual com Postgres; nenhuma restauracao foi executada")
 	}
 }

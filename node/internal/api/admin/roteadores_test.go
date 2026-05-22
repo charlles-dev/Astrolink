@@ -185,6 +185,9 @@ func (s adminRouterTestStore) CreatePix(context.Context, store.CreatePixInput) (
 func (s adminRouterTestStore) PixStatus(context.Context, string) (store.PixTransaction, bool, error) {
 	return store.PixTransaction{}, false, nil
 }
+func (s adminRouterTestStore) UpdatePixStatus(context.Context, store.UpdatePixStatusInput) (store.PixTransaction, bool, error) {
+	return store.PixTransaction{}, false, nil
+}
 func (s adminRouterTestStore) RedeemVoucher(context.Context, store.RedeemVoucherInput) (store.RedeemVoucherResult, error) {
 	return store.RedeemVoucherResult{}, nil
 }
