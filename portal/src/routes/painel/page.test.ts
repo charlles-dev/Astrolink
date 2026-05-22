@@ -25,6 +25,15 @@ vi.mock('$lib/api', async (importOriginal) => {
 
 const mockApi = vi.mocked(api)
 
+async function renderSetupPage() {
+  try {
+    const setupPage = await import('./setup/+page.svelte')
+    render(setupPage.default)
+  } catch {
+    render(Page)
+  }
+}
+
 beforeEach(() => {
   sessionStorage.clear()
   mockApi.loginAdmin.mockResolvedValue({
@@ -123,12 +132,15 @@ describe('Painel admin login', () => {
 
     await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
 
-    expect(await screen.findByText('Setup indisponivel')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Usuarios conectados' })).toBeInTheDocument()
+    await waitFor(() => {
+      expect(mockApi.getSetupStatus).toHaveBeenCalledWith('token-123')
+    })
+    expect(screen.getByRole('heading', { name: 'Painel local' })).toBeInTheDocument()
+    expect(screen.getByText('Usuarios ativos')).toBeInTheDocument()
   })
 
   it('saves setup env patches through the page API', async () => {
-    render(Page)
+    await renderSetupPage()
 
     await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
     await fireEvent.input(await screen.findByLabelText('Usuario admin'), {

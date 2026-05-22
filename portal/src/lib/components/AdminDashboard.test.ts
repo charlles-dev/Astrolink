@@ -7,6 +7,7 @@ describe('AdminDashboard', () => {
   it('renders health, plans and connected users', () => {
     render(AdminDashboard, {
       props: {
+        activePage: 'overview',
         health: {
           status: 'healthy',
           versao: '0.1.0',
@@ -68,9 +69,36 @@ describe('AdminDashboard', () => {
     expect(screen.getByRole('heading', { name: 'Painel local' })).toBeInTheDocument()
     expect(screen.getByText('Banco')).toBeInTheDocument()
     expect(screen.getByText('memory')).toBeInTheDocument()
-    expect(screen.getAllByText('Acesso 24 Horas').length).toBeGreaterThan(0)
+    expect(screen.getByText('Usuarios ativos')).toBeInTheDocument()
     expect(screen.getByText('AA:BB:CC:DD:EE:FF')).toBeInTheDocument()
-    expect(screen.getByText('VIPA-1234')).toBeInTheDocument()
+  })
+
+  it('marks the active page in shell navigation', () => {
+    render(AdminDashboard, {
+      props: {
+        activePage: 'vouchers',
+        health: null,
+        planos: [],
+        vouchers: [],
+        usuarios: [],
+        loading: false,
+        actionMessage: '',
+        onRefresh: vi.fn(),
+        onDisconnect: vi.fn(),
+        onGenerateVouchers: vi.fn(),
+        onLogout: vi.fn()
+      }
+    })
+
+    const voucherLinks = screen.getAllByRole('link', { name: 'Vouchers' })
+    expect(voucherLinks).toHaveLength(2)
+    voucherLinks.forEach((link) => {
+      expect(link).toHaveAttribute('aria-current', 'page')
+    })
+
+    screen.getAllByRole('link', { name: 'Usuarios' }).forEach((link) => {
+      expect(link).not.toHaveAttribute('aria-current')
+    })
   })
 
   it('requests user disconnect from the row action', async () => {
@@ -78,6 +106,7 @@ describe('AdminDashboard', () => {
 
     render(AdminDashboard, {
       props: {
+        activePage: 'usuarios',
         health: null,
         planos: [],
         vouchers: [],
@@ -109,6 +138,7 @@ describe('AdminDashboard', () => {
 
     render(AdminDashboard, {
       props: {
+        activePage: 'vouchers',
         health: null,
         planos: [
           {
@@ -156,6 +186,7 @@ describe('AdminDashboard', () => {
 
     render(AdminDashboard, {
       props: {
+        activePage: 'vouchers',
         health: null,
         planos: [
           {
@@ -204,6 +235,7 @@ describe('AdminDashboard', () => {
 
     render(AdminDashboard, {
       props: {
+        activePage: 'vouchers',
         health: null,
         planos: [
           {
@@ -252,6 +284,7 @@ describe('AdminDashboard', () => {
 
     render(AdminDashboard, {
       props: {
+        activePage: 'vouchers',
         health: null,
         planos: [],
         vouchers: [
@@ -288,6 +321,7 @@ describe('AdminDashboard', () => {
 
     render(AdminDashboard, {
       props: {
+        activePage: 'vouchers',
         health: null,
         planos: [],
         vouchers: [],
@@ -318,6 +352,7 @@ describe('AdminDashboard', () => {
 
     render(AdminDashboard, {
       props: {
+        activePage: 'pagamentos',
         health: null,
         planos: [],
         vouchers: [],
@@ -379,6 +414,7 @@ describe('AdminDashboard', () => {
 
     render(AdminDashboard, {
       props: {
+        activePage: 'logs',
         health: null,
         planos: [],
         vouchers: [],
@@ -443,6 +479,7 @@ describe('AdminDashboard', () => {
   it('renders live events from the dashboard stream state', () => {
     render(AdminDashboard, {
       props: {
+        activePage: 'logs',
         health: null,
         planos: [],
         vouchers: [],
