@@ -26,6 +26,8 @@ func Register(app *fiber.App, deps Dependencies) {
 	protected.Post("/auth/logout", logoutHandler(deps))
 	protected.Get("/auth/me", meHandler())
 	protected.Get("/sistema/saude", healthHandler(deps))
+	protected.Get("/setup/status", setupStatusHandler(deps))
+	protected.Put("/setup/env", setupEnvHandler(deps))
 	protected.Get("/planos", planosHandler(deps))
 	protected.Post("/planos", criarPlanoHandler(deps))
 	protected.Put("/planos/:id", atualizarPlanoHandler(deps))

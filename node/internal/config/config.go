@@ -13,19 +13,23 @@ const (
 	EnvMercadoPagoAccessToken = "MERCADOPAGO_ACCESS_TOKEN"
 	EnvMercadoPagoAPIBaseURL  = "MERCADOPAGO_API_BASE_URL"
 	EnvMercadoPagoPayerEmail  = "MERCADOPAGO_PAYER_EMAIL"
+	EnvAstrolinkEnvFile       = "ASTROLINK_ENV_FILE"
+	EnvAstrolinkAllowEnvWrite = "ASTROLINK_ALLOW_ENV_WRITE"
 	DefaultPaymentsProvider   = "demo"
 )
 
 type Config struct {
-	Env             string
-	HTTPAddr        string
-	NodeName        string
-	AdminUser       string
-	AdminPassword   string
-	AdminTOTPSecret string
-	JWTSecret       string
-	DatabaseURL     string
-	LogLevel        slog.Level
+	Env                    string
+	HTTPAddr               string
+	AstrolinkEnvFile       string
+	AstrolinkAllowEnvWrite bool
+	NodeName               string
+	AdminUser              string
+	AdminPassword          string
+	AdminTOTPSecret        string
+	JWTSecret              string
+	DatabaseURL            string
+	LogLevel               slog.Level
 
 	PaymentsProvider         string
 	MercadoPagoAccessToken   string
@@ -43,35 +47,59 @@ type Config struct {
 }
 
 func FromEnv() Config {
+	envFilePath := strings.TrimSpace(os.Getenv(EnvAstrolinkEnvFile))
+	fileValues := loadEnvFileValues(envFilePath)
 	return Config{
-		Env:             env("GO_ENV", "development"),
-		HTTPAddr:        env("HTTP_ADDR", ":5000"),
-		NodeName:        env("NODE_NAME", "dev-node-01"),
-		AdminUser:       env("ADMIN_USUARIO", "admin"),
-		AdminPassword:   env("ADMIN_SENHA", "admin123"),
-		AdminTOTPSecret: env("ADMIN_TOTP_SECRET", ""),
-		JWTSecret:       env("JWT_SECRET", "dev-jwt-secret-nao-usar-em-producao-32chars"),
-		DatabaseURL:     env("DATABASE_URL", ""),
-		LogLevel:        parseLogLevel(env("LOG_LEVEL", "info")),
+		Env:                    env(fileValues, "GO_ENV", "development"),
+		HTTPAddr:               env(fileValues, "HTTP_ADDR", ":5000"),
+		AstrolinkEnvFile:       envFilePathOrDefault(envFilePath),
+		AstrolinkAllowEnvWrite: parseBool(env(fileValues, EnvAstrolinkAllowEnvWrite, "false")),
+		NodeName:               env(fileValues, "NODE_NAME", "dev-node-01"),
+		AdminUser:              env(fileValues, "ADMIN_USUARIO", "admin"),
+		AdminPassword:          env(fileValues, "ADMIN_SENHA", "admin123"),
+		AdminTOTPSecret:        env(fileValues, "ADMIN_TOTP_SECRET", ""),
+		JWTSecret:              env(fileValues, "JWT_SECRET", "dev-jwt-secret-nao-usar-em-producao-32chars"),
+		DatabaseURL:            env(fileValues, "DATABASE_URL", ""),
+		LogLevel:               parseLogLevel(env(fileValues, "LOG_LEVEL", "info")),
 
-		PaymentsProvider:         env(EnvPaymentsProvider, DefaultPaymentsProvider),
-		MercadoPagoAccessToken:   env(EnvMercadoPagoAccessToken, ""),
-		MercadoPagoAPIBaseURL:    env(EnvMercadoPagoAPIBaseURL, ""),
-		MercadoPagoPayerEmail:    env(EnvMercadoPagoPayerEmail, ""),
-		MercadoPagoWebhookSecret: env("MERCADOPAGO_WEBHOOK_SECRET", ""),
+		PaymentsProvider:         env(fileValues, EnvPaymentsProvider, DefaultPaymentsProvider),
+		MercadoPagoAccessToken:   env(fileValues, EnvMercadoPagoAccessToken, ""),
+		MercadoPagoAPIBaseURL:    env(fileValues, EnvMercadoPagoAPIBaseURL, ""),
+		MercadoPagoPayerEmail:    env(fileValues, EnvMercadoPagoPayerEmail, ""),
+		MercadoPagoWebhookSecret: env(fileValues, "MERCADOPAGO_WEBHOOK_SECRET", ""),
 
-		OpenNDSEnabled: parseBool(env("OPENNDS_ENABLED", "false")),
-		OpenNDSHost:    env("OPENNDS_SSH_HOST", ""),
-		OpenNDSPort:    parseInt(env("OPENNDS_SSH_PORT", "22"), 22),
-		OpenNDSUser:    env("OPENNDS_SSH_USER", "root"),
-		OpenNDSKeyPath: env("OPENNDS_SSH_KEY_PATH", ""),
-		OpenNDSTimeout: parseDuration(env("OPENNDS_SSH_TIMEOUT", "10s"), 10*time.Second),
-		OpenNDSRetries: parseInt(env("OPENNDS_AUTH_RETRIES", "3"), 3),
+		OpenNDSEnabled: parseBool(env(fileValues, "OPENNDS_ENABLED", "false")),
+		OpenNDSHost:    env(fileValues, "OPENNDS_SSH_HOST", ""),
+		OpenNDSPort:    parseInt(env(fileValues, "OPENNDS_SSH_PORT", "22"), 22),
+		OpenNDSUser:    env(fileValues, "OPENNDS_SSH_USER", "root"),
+		OpenNDSKeyPath: env(fileValues, "OPENNDS_SSH_KEY_PATH", ""),
+		OpenNDSTimeout: parseDuration(env(fileValues, "OPENNDS_SSH_TIMEOUT", "10s"), 10*time.Second),
+		OpenNDSRetries: parseInt(env(fileValues, "OPENNDS_AUTH_RETRIES", "3"), 3),
 	}
 }
 
-func env(key, fallback string) string {
+func loadEnvFileValues(path string) map[string]string {
+	path = envFilePathOrDefault(path)
+	file, err := LoadEnvFile(path)
+	if err != nil {
+		return map[string]string{}
+	}
+	return file.Values()
+}
+
+func envFilePathOrDefault(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ".env"
+	}
+	return path
+}
+
+func env(fileValues map[string]string, key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	if value := fileValues[key]; value != "" {
 		return value
 	}
 	return fallback

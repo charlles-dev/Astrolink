@@ -16,7 +16,9 @@ vi.mock('$lib/api', async (importOriginal) => {
       getAdminUsuarios: vi.fn(),
       getAdminVouchers: vi.fn(),
       getAdminPagamentos: vi.fn(),
-      getAdminLogs: vi.fn()
+      getAdminLogs: vi.fn(),
+      getSetupStatus: vi.fn(),
+      updateSetupEnv: vi.fn()
     }
   }
 })
@@ -52,6 +54,30 @@ beforeEach(() => {
     pagamentos: []
   })
   mockApi.getAdminLogs.mockResolvedValue({ total: 0, logs: [] })
+  mockApi.getSetupStatus.mockResolvedValue({
+    requires_restart: false,
+    writable: true,
+    groups: {
+      admin: {
+        label: 'Admin',
+        fields: [
+          {
+            key: 'ADMIN_USUARIO',
+            label: 'Usuario admin',
+            description: 'Login do painel',
+            secret: false,
+            configured: true,
+            value: 'admin'
+          }
+        ]
+      }
+    }
+  })
+  mockApi.updateSetupEnv.mockResolvedValue({
+    requires_restart: true,
+    writable: true,
+    groups: {}
+  })
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => new Response(null, { status: 204 }))
@@ -75,6 +101,43 @@ describe('Painel admin login', () => {
         usuario: 'admin',
         senha: 'admin123'
       })
+    })
+  })
+
+  it('loads setup status after login', async () => {
+    render(Page)
+
+    await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
+
+    await waitFor(() => {
+      expect(mockApi.getSetupStatus).toHaveBeenCalledWith('token-123')
+    })
+  })
+
+  it('keeps dashboard available when setup status fails', async () => {
+    mockApi.getSetupStatus.mockRejectedValueOnce(
+      new APIError(404, 'erro_interno', 'Setup indisponivel')
+    )
+
+    render(Page)
+
+    await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
+
+    expect(await screen.findByText('Setup indisponivel')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Usuarios conectados' })).toBeInTheDocument()
+  })
+
+  it('saves setup env patches through the page API', async () => {
+    render(Page)
+
+    await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
+    await fireEvent.input(await screen.findByLabelText('Usuario admin'), {
+      target: { value: 'operador' }
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Salvar setup local' }))
+
+    await waitFor(() => {
+      expect(mockApi.updateSetupEnv).toHaveBeenCalledWith({ ADMIN_USUARIO: 'operador' }, 'token-123')
     })
   })
 

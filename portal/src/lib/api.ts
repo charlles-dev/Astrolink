@@ -23,6 +23,7 @@ import type {
   ResgatarVoucherBody,
   ResgatarVoucherResponse,
   SessaoStatus,
+  SetupStatus,
   Settings
 } from './types'
 
@@ -120,6 +121,10 @@ export function createApiClient(baseURL = '') {
       request<AdminLoginResponse>('POST', '/admin/auth/login', body),
     getAdminHealth: (token: string) =>
       request<AdminHealthResponse>('GET', '/admin/sistema/saude', undefined, token),
+    getSetupStatus: (token: string) =>
+      request<SetupStatus>('GET', '/admin/setup/status', undefined, token),
+    updateSetupEnv: (values: Record<string, string>, token: string) =>
+      request<SetupStatus>('PUT', '/admin/setup/env', { values }, token),
     getAdminPlanos: (token: string) =>
       request<PlanosResponse>('GET', '/admin/planos', undefined, token),
     createAdminPlano: (token: string, body: AdminPlanBody) =>

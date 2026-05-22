@@ -322,6 +322,85 @@ Resposta:
 
 Retorna health detalhado do no local.
 
+### `GET /admin/setup/status`
+
+Retorna o estado seguro da configuracao local. Exige Bearer token.
+
+Resposta:
+
+```json
+{
+  "requires_restart": false,
+  "writable": false,
+  "groups": {
+    "payments": {
+      "label": "Mercado Pago",
+      "fields": [
+        {
+          "key": "MERCADOPAGO_ACCESS_TOKEN",
+          "label": "Access token",
+          "description": "Token privado da conta Mercado Pago.",
+          "secret": true,
+          "configured": true
+        },
+        {
+          "key": "MERCADOPAGO_PAYER_EMAIL",
+          "label": "E-mail pagador",
+          "description": "E-mail padrao para simulacoes locais.",
+          "secret": false,
+          "configured": true,
+          "value": "cliente@example.com"
+        }
+      ]
+    }
+  }
+}
+```
+
+Campos marcados como `secret: true` nunca retornam `value`; a API informa apenas
+se estao configurados. O arquivo consultado tem default `.env`; para usar outro
+arquivo, defina `ASTROLINK_ENV_FILE` no processo antes de iniciar o node. O mesmo
+arquivo tambem e lido pelo backend no startup.
+
+### `PUT /admin/setup/env`
+
+Atualiza chaves permitidas do `.env` local. Exige Bearer token e
+`ASTROLINK_ALLOW_ENV_WRITE=true`; com o default `false`, retorna erro de escrita
+desabilitada.
+
+Body:
+
+```json
+{
+  "values": {
+    "PAYMENTS_PROVIDER": "mercadopago",
+    "MERCADOPAGO_ACCESS_TOKEN": "APP_USR-...",
+    "MERCADOPAGO_PAYER_EMAIL": "cliente@example.com",
+    "OPENNDS_ENABLED": "false"
+  }
+}
+```
+
+Resposta: mesmo formato de `GET /admin/setup/status`, com
+`requires_restart: true` quando alguma variavel foi gravada. Exemplo abreviado:
+
+```json
+{
+  "requires_restart": true,
+  "writable": true,
+  "groups": {
+    "payments": {
+      "label": "Mercado Pago",
+      "fields": []
+    }
+  }
+}
+```
+
+A rota nao e um editor generico de `.env`: somente chaves de setup local devem
+ser aceitas. Alteracoes feitas por essa rota ou pelo CLI `go run ./cmd/setup`
+exigem reiniciar o node para entrar em vigor.
+
 ### `GET /admin/planos`
 
 Lista todos os planos.

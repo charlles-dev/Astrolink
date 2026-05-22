@@ -21,7 +21,8 @@
     AdminVoucherFilters,
     AdminRestoreBackupBody,
     GenerateAdminVouchersBody,
-    Plano
+    Plano,
+    SetupStatus
   } from '$lib/types'
 
   const TOKEN_KEY = 'astrolink.admin.token'
@@ -39,6 +40,7 @@
   let pagamentosTotais: AdminPaymentTotals = emptyPaymentTotals()
   let logs: AdminLog[] = []
   let logsTotal = 0
+  let setupStatus: SetupStatus | null = null
   let liveConnected = false
   let liveLastEventAt = ''
   let liveSnapshot: AdminLiveSnapshot | null = null
@@ -51,6 +53,7 @@
   let loginError = ''
   let actionMessage = ''
   let backupMessage = ''
+  let setupMessage = ''
   let liveAbortController: AbortController | null = null
   let liveBuffer = ''
 
@@ -112,12 +115,23 @@
       planos = nextPlanos.planos
       usuarios = nextUsuarios.usuarios
       vouchers = nextVouchers.vouchers
-      await loadOperations()
+      await Promise.allSettled([loadOperations(), loadSetupStatus()])
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
       actionMessage = messageFromError(error, 'Nao foi possivel carregar o painel')
     } finally {
       loading = false
+    }
+  }
+
+  async function loadSetupStatus() {
+    try {
+      setupStatus = await api.getSetupStatus(token)
+      setupMessage = ''
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) throw error
+      setupStatus = null
+      setupMessage = messageFromError(error, 'Setup local indisponivel')
     }
   }
 
@@ -331,6 +345,25 @@
     }
   }
 
+  async function saveSetup(values: Record<string, string>) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    setupMessage = ''
+    try {
+      setupStatus = await api.updateSetupEnv(values, token)
+      setupMessage = setupStatus.requires_restart
+        ? 'Setup local salvo. Reinicie o servico para aplicar.'
+        : 'Setup local salvo'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      setupMessage = messageFromError(error, 'Nao foi possivel salvar o setup local')
+      throw error
+    } finally {
+      loading = false
+    }
+  }
+
   async function reloadVouchers() {
     const result = await api.getAdminVouchers(token, voucherFilters)
     vouchers = result.vouchers
@@ -409,6 +442,7 @@
     pagamentosTotais = emptyPaymentTotals()
     logs = []
     logsTotal = 0
+    setupStatus = null
     liveConnected = false
     liveLastEventAt = ''
     liveSnapshot = null
@@ -417,6 +451,7 @@
     paymentFilters = {}
     logFilters = {}
     backupMessage = ''
+    setupMessage = ''
   }
 
   function startLiveEvents() {
@@ -584,6 +619,7 @@
     {pagamentosTotais}
     {logs}
     {logsTotal}
+    {setupStatus}
     {liveConnected}
     {liveLastEventAt}
     {liveSnapshot}
@@ -591,6 +627,7 @@
     {loading}
     {actionMessage}
     {backupMessage}
+    {setupMessage}
     onRefresh={loadDashboard}
     onDisconnect={disconnect}
     onSavePlan={savePlan}
@@ -605,6 +642,7 @@
     onExportLogs={exportLogs}
     onCreateBackup={createBackup}
     onRestoreBackup={restoreBackup}
+    onSaveSetup={saveSetup}
     onLogout={logout}
   />
 {:else}

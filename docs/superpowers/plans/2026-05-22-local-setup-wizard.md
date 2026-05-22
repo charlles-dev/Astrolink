@@ -44,7 +44,6 @@
 - `MERCADOPAGO_API_BASE_URL`
 - `MERCADOPAGO_PAYER_EMAIL`
 - `MERCADOPAGO_WEBHOOK_SECRET`
-- `MP_PUBLIC_KEY`
 
 ### Router
 
@@ -331,7 +330,6 @@ AstrolinkAllowEnvWrite: parseBool(env(EnvAstrolinkAllowEnvWrite, "false")),
 Modify `.env.example`:
 
 ```env
-ASTROLINK_ENV_FILE=.env
 ASTROLINK_ALLOW_ENV_WRITE=false
 ```
 
@@ -422,7 +420,6 @@ var setupDefinitions = []setupDefinition{
 	{Group: "payments", Label: "API base Mercado Pago", Key: "MERCADOPAGO_API_BASE_URL"},
 	{Group: "payments", Label: "Email pagador Mercado Pago", Key: "MERCADOPAGO_PAYER_EMAIL"},
 	{Group: "payments", Label: "Webhook secret Mercado Pago", Key: "MERCADOPAGO_WEBHOOK_SECRET", Secret: true},
-	{Group: "payments", Label: "Public key Mercado Pago", Key: "MP_PUBLIC_KEY"},
 	{Group: "router", Label: "OpenNDS habilitado", Key: "OPENNDS_ENABLED"},
 	{Group: "router", Label: "Host SSH OpenNDS", Key: "OPENNDS_SSH_HOST"},
 	{Group: "router", Label: "Porta SSH OpenNDS", Key: "OPENNDS_SSH_PORT"},

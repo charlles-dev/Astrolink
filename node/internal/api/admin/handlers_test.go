@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -129,6 +131,133 @@ func TestGerarVouchers_RetornaCodigosCriados(t *testing.T) {
 	}
 	if got.LoteID != 7 || got.Quantidade != 2 || len(got.Vouchers) != 2 {
 		t.Fatalf("resposta inesperada: %+v", got)
+	}
+}
+
+func TestSetupStatus_RetornaVariaveisSemExporSegredos(t *testing.T) {
+	app := fiber.New()
+	repo := &fakeStore{}
+	cfg := testConfig()
+	cfg.AstrolinkEnvFile = tempEnvFile(t, "PAYMENTS_PROVIDER=mercadopago\nMERCADOPAGO_ACCESS_TOKEN=secret-token\nMERCADOPAGO_PAYER_EMAIL=cliente@example.com\n")
+	admin.Register(app, admin.Dependencies{Config: cfg, Store: repo, Gateway: &fakeGateway{}})
+	tokens := loginAdmin(t, app)
+
+	req := httptest.NewRequest("GET", "/admin/setup/status", nil)
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(body))
+	}
+	if strings.Contains(string(body), "secret-token") {
+		t.Fatalf("setup status vazou segredo: %s", string(body))
+	}
+	var got config.SetupStatus
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	accessToken := setupFieldFromStatus(t, got, "payments", config.EnvMercadoPagoAccessToken)
+	if !accessToken.Configured || accessToken.Value != "" {
+		t.Fatalf("access token inesperado: %+v", accessToken)
+	}
+	payerEmail := setupFieldFromStatus(t, got, "payments", config.EnvMercadoPagoPayerEmail)
+	if payerEmail.Value != "cliente@example.com" {
+		t.Fatalf("payer email = %q", payerEmail.Value)
+	}
+}
+
+func TestSetupEnv_BloqueiaEscritaQuandoDesabilitada(t *testing.T) {
+	app := fiber.New()
+	repo := &fakeStore{}
+	cfg := testConfig()
+	cfg.AstrolinkEnvFile = tempEnvFile(t, "PAYMENTS_PROVIDER=demo\n")
+	cfg.AstrolinkAllowEnvWrite = false
+	admin.Register(app, admin.Dependencies{Config: cfg, Store: repo, Gateway: &fakeGateway{}})
+	tokens := loginAdmin(t, app)
+
+	body := strings.NewReader(`{"values":{"MERCADOPAGO_PAYER_EMAIL":"cliente@example.com"}}`)
+	req := httptest.NewRequest("PUT", "/admin/setup/env", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusForbidden {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(payload))
+	}
+}
+
+func TestSetupEnv_GravaPatchPermitido(t *testing.T) {
+	app := fiber.New()
+	repo := &fakeStore{}
+	envPath := tempEnvFile(t, "PAYMENTS_PROVIDER=demo\n")
+	cfg := testConfig()
+	cfg.AstrolinkEnvFile = envPath
+	cfg.AstrolinkAllowEnvWrite = true
+	admin.Register(app, admin.Dependencies{Config: cfg, Store: repo, Gateway: &fakeGateway{}})
+	tokens := loginAdmin(t, app)
+
+	body := strings.NewReader(`{"values":{"MERCADOPAGO_PAYER_EMAIL":"cliente@example.com"}}`)
+	req := httptest.NewRequest("PUT", "/admin/setup/env", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(payload))
+	}
+	var got config.SetupStatus
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.RequiresRestart || !got.Writable {
+		t.Fatalf("status inesperado: %+v", got)
+	}
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "MERCADOPAGO_PAYER_EMAIL=cliente@example.com") {
+		t.Fatalf(".env nao recebeu patch:\n%s", string(data))
+	}
+}
+
+func TestSetupEnv_RejeitaChaveDesconhecida(t *testing.T) {
+	app := fiber.New()
+	repo := &fakeStore{}
+	cfg := testConfig()
+	cfg.AstrolinkEnvFile = tempEnvFile(t, "PAYMENTS_PROVIDER=demo\n")
+	cfg.AstrolinkAllowEnvWrite = true
+	admin.Register(app, admin.Dependencies{Config: cfg, Store: repo, Gateway: &fakeGateway{}})
+	tokens := loginAdmin(t, app)
+
+	body := strings.NewReader(`{"values":{"SHELL":"powershell"}}`)
+	req := httptest.NewRequest("PUT", "/admin/setup/env", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(payload))
 	}
 }
 
@@ -808,6 +937,30 @@ func testConfig() config.Config {
 		AdminPassword: "admin123",
 		JWTSecret:     "test-jwt-secret-com-mais-de-32-bytes",
 	}
+}
+
+func tempEnvFile(t *testing.T, contents string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func setupFieldFromStatus(t *testing.T, status config.SetupStatus, groupKey, fieldKey string) config.SetupField {
+	t.Helper()
+	group, ok := status.Groups[groupKey]
+	if !ok {
+		t.Fatalf("group %q nao encontrado", groupKey)
+	}
+	for _, field := range group.Fields {
+		if field.Key == fieldKey {
+			return field
+		}
+	}
+	t.Fatalf("field %q nao encontrado em %q", fieldKey, groupKey)
+	return config.SetupField{}
 }
 
 func loginAdmin(t *testing.T, app *fiber.App) authResponse {

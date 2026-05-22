@@ -15,6 +15,7 @@ Codigo fonte: `node/`
 ```text
 node/
   cmd/server/              entrada da aplicacao
+  cmd/setup/               assistente local para criar/atualizar .env
   internal/api/            servidor Fiber
   internal/api/portal/     rotas publicas do portal
   internal/api/admin/      rotas iniciais do admin local
@@ -47,6 +48,8 @@ node/
 - `POST /admin/auth/logout`
 - `GET /admin/auth/me`
 - `GET /admin/sistema/saude`
+- `GET /admin/setup/status`
+- `PUT /admin/setup/env`
 - `GET /admin/planos`
 - `GET /admin/usuarios`
 - `GET /admin/vouchers`
@@ -60,6 +63,7 @@ Variaveis principais:
 ```env
 GO_ENV=development
 HTTP_ADDR=:5000
+ASTROLINK_ALLOW_ENV_WRITE=false
 DATABASE_URL=postgres://astrolink:devpassword@localhost:5432/astrolink?sslmode=disable
 ADMIN_USUARIO=admin
 ADMIN_SENHA=admin123
@@ -78,6 +82,30 @@ OPENNDS_SSH_USER=root
 OPENNDS_SSH_KEY_PATH=C:\Users\charl\.ssh\id_ed25519
 OPENNDS_AUTH_RETRIES=3
 ```
+
+Para setup local, prefira o assistente CLI:
+
+```powershell
+cd node
+go run ./cmd/setup
+```
+
+O CLI cria ou atualiza `.env` por padrao. Para usar outro arquivo, rode
+`go run ./cmd/setup -env-file caminho\\.env` ou defina `ASTROLINK_ENV_FILE` no
+processo antes de iniciar o node. Ele e o caminho recomendado para dados
+pessoais e segredos de instalacao local, incluindo Mercado Pago, admin,
+banco/local e OpenNDS. No startup, o backend tambem consulta esse arquivo antes
+de montar a config em memoria; variaveis ja definidas no processo continuam
+tendo prioridade.
+
+`ASTROLINK_ALLOW_ENV_WRITE=false` impede escrita de `.env` pela API/painel. Para
+habilitar a escrita web em um no local confiavel, defina
+`ASTROLINK_ALLOW_ENV_WRITE=true` antes de iniciar o backend. Mesmo assim, a API
+de setup nunca deve retornar segredos em texto: campos sensiveis aparecem apenas
+como configurados ou nao configurados.
+
+Alteracoes no `.env` nao mudam a configuracao em memoria. Reinicie o node depois
+de usar o CLI ou `PUT /admin/setup/env`.
 
 Para criar PIX real e consultar detalhes de pagamento no webhook Mercado Pago,
 use:

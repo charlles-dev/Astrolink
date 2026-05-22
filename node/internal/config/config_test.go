@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -68,6 +70,60 @@ func TestFromEnv_LoadsAdminTOTPSecret(t *testing.T) {
 
 	if cfg.AdminTOTPSecret != "JBSWY3DPEHPK3PXP" {
 		t.Fatalf("AdminTOTPSecret = %q", cfg.AdminTOTPSecret)
+	}
+}
+
+func TestFromEnv_LoadsValuesFromConfiguredEnvFile(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(envPath, []byte("ADMIN_USUARIO=operador\nMERCADOPAGO_PAYER_EMAIL=cliente@example.com\nASTROLINK_ALLOW_ENV_WRITE=true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(EnvAstrolinkEnvFile, envPath)
+	t.Setenv("ADMIN_USUARIO", "")
+	t.Setenv(EnvMercadoPagoPayerEmail, "")
+	t.Setenv(EnvAstrolinkAllowEnvWrite, "")
+
+	cfg := FromEnv()
+
+	if cfg.AdminUser != "operador" {
+		t.Fatalf("AdminUser = %q", cfg.AdminUser)
+	}
+	if cfg.MercadoPagoPayerEmail != "cliente@example.com" {
+		t.Fatalf("MercadoPagoPayerEmail = %q", cfg.MercadoPagoPayerEmail)
+	}
+	if !cfg.AstrolinkAllowEnvWrite {
+		t.Fatal("AstrolinkAllowEnvWrite = false, want true")
+	}
+}
+
+func TestFromEnv_DoesNotRedirectEnvFileFromLoadedFile(t *testing.T) {
+	envPath := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(envPath, []byte("ASTROLINK_ENV_FILE=outro.env\nADMIN_USUARIO=operador\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(EnvAstrolinkEnvFile, envPath)
+
+	cfg := FromEnv()
+
+	if cfg.AstrolinkEnvFile != envPath {
+		t.Fatalf("AstrolinkEnvFile = %q, want %q", cfg.AstrolinkEnvFile, envPath)
+	}
+	if cfg.AdminUser != "operador" {
+		t.Fatalf("AdminUser = %q", cfg.AdminUser)
+	}
+}
+
+func TestFromEnv_LoadsLocalSetupConfig(t *testing.T) {
+	t.Setenv(EnvAstrolinkEnvFile, "C:\\astrolink\\.env")
+	t.Setenv(EnvAstrolinkAllowEnvWrite, "sim")
+
+	cfg := FromEnv()
+
+	if cfg.AstrolinkEnvFile != "C:\\astrolink\\.env" {
+		t.Fatalf("AstrolinkEnvFile = %q", cfg.AstrolinkEnvFile)
+	}
+	if !cfg.AstrolinkAllowEnvWrite {
+		t.Fatal("AstrolinkAllowEnvWrite = false, want true")
 	}
 }
 

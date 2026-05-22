@@ -69,6 +69,34 @@ Retorna o usuario autenticado.
 Retorna status do banco e placeholders de Redis, RabbitMQ, Mercado Pago e
 roteador.
 
+### Setup Local
+
+`GET /admin/setup/status`
+
+Retorna o status redigido da configuracao local usada pelo assistente de setup.
+A rota exige Bearer token. Campos secretos, como tokens Mercado Pago, segredo de
+webhook, senha admin, TOTP e chave SSH, nunca retornam em texto; eles aparecem
+somente como `configured: true` ou `configured: false`.
+
+`PUT /admin/setup/env`
+
+Atualiza chaves permitidas do `.env` local. A rota exige Bearer token e so grava
+quando `ASTROLINK_ALLOW_ENV_WRITE=true`; por padrao a escrita fica desabilitada.
+O arquivo alvo tem default `.env`; para usar outro arquivo, defina
+`ASTROLINK_ENV_FILE` no processo antes de iniciar o node. O backend le esse
+arquivo no startup, preservando prioridade para variaveis ja definidas no
+processo.
+
+Use o painel como alternativa local controlada. O fluxo recomendado continua
+sendo executar o CLI dentro de `node/`:
+
+```powershell
+go run ./cmd/setup
+```
+
+Toda alteracao feita pelo painel ou CLI exige reiniciar o node para valer. O
+admin cloud continua fora de escopo nesta fase.
+
 ### Planos
 
 `GET /admin/planos`
@@ -186,6 +214,7 @@ O painel local cobre:
 - eventos ao vivo com snapshot operacional
 - logs operacionais/auditoria e exportacao CSV
 - backup manual e validacao protegida de restore
+- status de setup local e escrita opcional do `.env` quando liberada por env
 
 ## Proxima Etapa Recomendada
 

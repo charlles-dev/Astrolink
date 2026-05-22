@@ -283,3 +283,23 @@ export interface AdminRestoreBackupBody {
   arquivo: string
   confirmacao: string
 }
+
+export interface SetupField {
+  key: string
+  label: string
+  description: string
+  secret: boolean
+  configured: boolean
+  value?: string
+}
+
+export interface SetupGroup {
+  label: string
+  fields: SetupField[]
+}
+
+export interface SetupStatus {
+  requires_restart: boolean
+  writable: boolean
+  groups: Record<string, SetupGroup>
+}

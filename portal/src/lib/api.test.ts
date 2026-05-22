@@ -112,6 +112,75 @@ describe('createApiClient', () => {
     )
   })
 
+  it('loads local setup status with bearer token', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            requires_restart: false,
+            writable: true,
+            groups: {
+              mercadopago: {
+                label: 'Mercado Pago',
+                fields: [
+                  {
+                    key: 'MERCADOPAGO_ACCESS_TOKEN',
+                    label: 'Access token',
+                    description: 'Token privado',
+                    secret: true,
+                    configured: true
+                  }
+                ]
+              }
+            }
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      )
+    )
+
+    const api = createApiClient('')
+    const result = await api.getSetupStatus('token-123')
+
+    expect(result.groups.mercadopago.fields[0].configured).toBe(true)
+    expect(fetch).toHaveBeenCalledWith(
+      '/admin/setup/status',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+  })
+
+  it('updates local setup env values with bearer token', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ requires_restart: true, writable: true, groups: {} }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
+      )
+    )
+
+    const api = createApiClient('')
+    const result = await api.updateSetupEnv({ ADMIN_USUARIO: 'novo-admin' }, 'token-123')
+
+    expect(result.requires_restart).toBe(true)
+    expect(fetch).toHaveBeenCalledWith(
+      '/admin/setup/env',
+      expect.objectContaining({
+        method: 'PUT',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-123',
+          'Content-Type': 'application/json'
+        }),
+        body: JSON.stringify({ values: { ADMIN_USUARIO: 'novo-admin' } })
+      })
+    )
+  })
+
   it('loads admin vouchers with bearer token', async () => {
     vi.stubGlobal(
       'fetch',

@@ -8,6 +8,7 @@
   import AdminMetrics from './admin/AdminMetrics.svelte'
   import AdminPaymentsPanel from './admin/AdminPaymentsPanel.svelte'
   import AdminPlansPanel from './admin/AdminPlansPanel.svelte'
+  import AdminSetupPanel from './admin/AdminSetupPanel.svelte'
   import AdminUsersPanel from './admin/AdminUsersPanel.svelte'
   import AdminVouchersPanel from './admin/AdminVouchersPanel.svelte'
   import type {
@@ -23,7 +24,8 @@
     AdminVoucher,
     AdminVoucherFilters,
     GenerateAdminVouchersBody,
-    Plano
+    Plano,
+    SetupStatus
   } from '../types'
 
   export let health: AdminHealthResponse | null = null
@@ -40,6 +42,7 @@
   }
   export let logs: AdminLog[] = []
   export let logsTotal = 0
+  export let setupStatus: SetupStatus | null = null
   export let liveConnected = false
   export let liveLastEventAt = ''
   export let liveSnapshot: AdminLiveSnapshot | null = null
@@ -47,6 +50,7 @@
   export let loading = false
   export let actionMessage = ''
   export let backupMessage = ''
+  export let setupMessage = ''
   export let onRefresh: () => void = () => {}
   export let onDisconnect: (mac: string) => void = () => {}
   export let onSavePlan: (input: AdminPlanBody, id?: number) => Promise<void> | void = () => {}
@@ -61,6 +65,7 @@
   export let onExportLogs: (filters: AdminLogFilters) => void = () => {}
   export let onCreateBackup: () => void = () => {}
   export let onRestoreBackup: (input: AdminRestoreBackupBody) => void = () => {}
+  export let onSaveSetup: (values: Record<string, string>) => Promise<void> | void = () => {}
   export let onLogout: () => void = () => {}
 </script>
 
@@ -89,6 +94,7 @@
 
     <aside class="side-stack">
       <AdminPlansPanel {planos} {loading} {onSavePlan} {onTogglePlanStatus} />
+      <AdminSetupPanel {setupStatus} {loading} {setupMessage} {onSaveSetup} />
       <AdminVouchersPanel
         {planos}
         {vouchers}
