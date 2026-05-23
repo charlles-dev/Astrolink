@@ -1,65 +1,124 @@
-# **Documentação de Arquitetura de Software: Sistema Hotspot Híbrido (PIX \+ Vouchers)**
+# Arquitetura de Software
 
-## **1\. Visão Geral da Stack Tecnológica (Simplificada)**
+## Estado Atual
 
-A arquitetura foi otimizada para correr de forma leve num computador portátil comum, eliminando a necessidade de servidores RADIUS complexos e pesados.
+Astrolink e um sistema local para vender e liberar acesso Wi-Fi em redes com
+OpenWrt/OpenNDS. A implementacao atual tem dois servicos principais:
 
-1. **Roteador (O Guardião):** Corre **OpenWrt** com o pacote **OpenNDS**. Ele é o responsável por intercetar a navegação, redirecionar o utilizador para o Captive Portal e aplicar o "Walled Garden" (Jardim Murado) para os bancos.  
-2. **Backend (O Cérebro):** Escrito em **Python** usando o framework **FastAPI**. Ele recebe os pedidos do OpenNDS, gera os códigos PIX, valida os Vouchers (PINs), gere o tempo dos utilizadores e manda o roteador libertar ou bloquear o acesso.  
-3. **Base de Dados:** **SQLite** (vem embutido no Python). É leve, não requer instalação de servidores e é mais que suficiente para milhares de acessos numa operação local.  
-4. **Frontend (A Cara do Negócio):** HTML/CSS simples (usando TailwindCSS) focado 100% em telemóveis (Mobile-First).
+- Backend local em Go (`node/`), expondo APIs HTTP e falando com OpenNDS.
+- Portal cativo em SvelteKit (`portal/`), consumindo a API local.
 
-## **2\. A Base de Dados (Esquema Resumido SQLite)**
+O painel cloud fica fora desta fase. A prioridade e consolidar o no local:
+portal, vouchers, PIX por provider, admin local e integracao OpenNDS.
 
-O sistema centraliza as regras de negócio em quatro tabelas principais:
+## Componentes
 
-* **Tabela usuarios:** Regista quem se está a ligar, usando o **MAC Address** (endereço físico) do telemóvel do cliente. Controla o momento exato do fim\_acesso.  
-* **Tabela planos:** Os pacotes que vende de forma automatizada (ex: 1 Hora, 1 Dia, 1 Semana) e os seus preços.  
-* **Tabela transacoes\_pix:** Rastreia as transações geradas via API bancária para saber se o cliente já pagou (necessário para o Polling).  
-* **Tabela vouchers (Nova):** Armazena os códigos PIN alfanuméricos gerados previamente pelo administrador para serem vendidos a dinheiro físico.
+### Roteador OpenWrt/OpenNDS
 
-## **3\. O Backend em Python (Endpoints / API)**
+O roteador intercepta clientes ainda nao autenticados, injeta `mac`, `ip` e
+`token` na URL do portal e controla a liberacao da internet. O backend autoriza
+e desconecta clientes usando comandos `ndsctl` via SSH.
 
-O seu script em Python terá de correr continuamente no portátil e responder às seguintes rotas (chamadas web):
+### Backend Go (`node/`)
 
-* **Rotas de Frontend:**  
-  * GET /login: Retorna a página HTML inicial do portal.  
-* **Rotas de Transação (PIX):**  
-  * POST /api/gerar-pix: Comunica com a API de pagamentos (ex: MercadoPago), gera o QR Code e liberta o Jardim Murado por 10 minutos no OpenNDS.  
-  * GET /api/status-pix: O telemóvel do cliente chama esta rota a cada 5 segundos para perguntar *"O meu PIX já foi pago?"*.  
-* **Rotas Híbridas (Dinheiro / Vouchers):**  
-  * POST /api/resgatar-voucher: Recebe o PIN digitado pelo cliente. Se for válido, queima (inutiliza) o código, vincula o MAC Address e liberta a internet imediatamente.  
-  * POST /api/admin/gerar-voucher: Rota oculta para o administrador gerar um lote de novos códigos para anotar em papel.
+Responsabilidades atuais:
 
-## **4\. O "Walled Garden" no OpenNDS (Bancos e PIX)**
+- Servir health check em `GET /api/saude`.
+- Expor configuracoes de white-label em `GET /api/settings`.
+- Listar planos em `GET /api/planos`.
+- Criar cobrancas PIX por provider demo ou Mercado Pago em `POST /api/pix/gerar`.
+- Consultar status de PIX em `GET /api/pix/status/:txid`.
+- Expor SSE simples em `GET /api/pix/aguardar/:txid`.
+- Aprovar PIX local em desenvolvimento por `POST /api/pix/dev/aprovar/:txid`.
+- Receber Webhooks Mercado Pago em `POST /api/webhooks/mercadopago` com
+  validacao HMAC quando o segredo esta configurado.
+- Resgatar vouchers em `POST /api/voucher/resgatar`.
+- Expor endpoints iniciais de admin local.
+- Expor stream SSE protegido do admin em `GET /admin/eventos`.
+- Autorizar/desautorizar MACs no OpenNDS quando habilitado.
 
-Para que o cliente consiga pagar o PIX sem ter internet, o OpenNDS no roteador é configurado com uma lista de exceções temporárias (o *Jardim Murado*).
+O backend usa store em memoria quando `DATABASE_URL` nao esta configurado e
+Postgres quando `DATABASE_URL` aponta para o banco local.
 
-1. O IP do seu Portátil é sempre livre (para a página de login abrir).  
-2. O OpenNDS liberta temporariamente os IPs/Domínios das APIs do banco.  
-3. **Estratégia de Bloqueio:** Para evitar que o cliente tente aceder a outras coisas durante os 10 minutos, o Python aplica uma restrição de velocidade muito severa (ex: 128 kbps) e um bloqueio de DNS para redes sociais. A app do banco funciona, mas o YouTube não.
+### Portal SvelteKit (`portal/`)
 
-## **5\. Fluxos da Vida Real (Passo a Passo)**
+Responsabilidades atuais:
 
-O sistema agora atende a dois perfis de clientes simultaneamente.
+- Ler `mac`, `ip` e `token` da URL.
+- Exibir experiencia visual do portal cativo.
+- Carregar settings e planos da API.
+- Permitir fluxo de voucher.
+- Permitir fluxo PIX por provider demo ou Mercado Pago.
+- Exibir estado de sucesso com tempo de acesso.
 
-### **Fluxo A: Cliente Autónomo (Paga com PIX)**
+### Banco Local Postgres
 
-1. O cliente entra no barco, liga-se ao Wi-Fi e abre o navegador (Captive Portal).  
-2. Escolhe o plano "24 Horas \- R$ 15".  
-3. O Python gera o PIX e ativa o "Walled Garden" para aquele telemóvel no roteador por 10 minutos.  
-4. O cliente abre a app do seu banco, cola o PIX e paga.  
-5. O cliente aguarda no portal. O Python (via polling) deteta o pagamento.  
-6. O Python atualiza a base de dados e envia um comando SSH para o roteador (ndsctl auth \<MAC\>) a libertar a velocidade máxima e o acesso livre.
+O schema atual vive em `node/migrations/000001_initial_schema.up.sql`.
+As tabelas principais sao:
 
-### **Fluxo B: Cliente Tradicional (Paga em Dinheiro Vivo)**
+- `planos`
+- `usuarios_mac`
+- `transacoes_pix`
+- `voucher_lotes`
+- `vouchers`
+- `voucher_usos`
+- `roteadores`
+- `blacklist_mac`
+- `walled_garden`
+- `system_settings`
+- `logs`
+- `sessoes_admin`
 
-1. O cliente chega até si com uma nota de R$ 50\.  
-2. Recebe o dinheiro, abre o seu painel de admin e clica em "Gerar Voucher 7 Dias".  
-3. O sistema devolve o código B4R-C0Z.  
-4. O cliente liga-se ao Wi-Fi, mas em vez de clicar nos planos, insere B4R-C0Z no campo de PIN.  
-5. O Python valida que o código existe e está disponível. Muda o estado do código para usado, calcula a hora de expiração (daqui a 7 dias) e liberta o acesso via SSH no roteador (ndsctl auth \<MAC\>).
+## Fluxo de Voucher
 
-### **Ponto de Convergência (A Expiração)**
+1. Cliente conecta ao Wi-Fi e abre o portal.
+2. OpenNDS redireciona para o portal com `mac`, `ip` e `token`.
+3. Cliente informa o voucher.
+4. Portal chama `POST /api/voucher/resgatar`.
+5. Backend valida o voucher e cria/atualiza `usuarios_mac`.
+6. Backend chama `ndsctl auth <mac> <duracao>` via SSH quando OpenNDS esta
+   habilitado.
+7. Portal mostra acesso liberado.
 
-Independentemente de como o cliente pagou (Fluxo A ou B), o Python tem um *Job* (tarefa de fundo) a correr a cada 1 minuto. Quando o relógio atingir o fim\_acesso daquele MAC Address, o Python executa ndsctl deauth \<MAC\> e a internet do cliente é cortada imediatamente, forçando-o a ver o portal de login de novo.
+## Fluxo PIX
+
+O fluxo PIX continua offline por padrao com `PAYMENTS_PROVIDER=demo`, mas pode
+criar cobrancas reais quando Mercado Pago esta configurado:
+
+1. Cliente escolhe um plano.
+2. Portal chama `POST /api/pix/gerar`.
+3. Backend gera `txid` e chama o provider configurado para obter copia-e-cola e QR.
+4. Portal acompanha status por polling/SSE.
+5. Em desenvolvimento, `POST /api/pix/dev/aprovar/:txid` simula pagamento
+   aprovado sem depender de webhook publico.
+6. O endpoint `POST /api/webhooks/mercadopago` valida a assinatura recebida,
+   consulta o provider de pagamentos e atualiza a transacao local quando o
+   status externo for aprovado.
+
+A integracao HTTP real com Mercado Pago usa `POST /v1/payments`, bearer token,
+idempotencia por `txid`, `payer.email` configurado por env e QR retornado por
+`point_of_interaction.transaction_data`.
+
+## Operacao Local
+
+O painel local em `/painel` concentra as acoes de operacao do no:
+
+- CRUD de planos.
+- Usuarios conectados e desconexao via OpenNDS.
+- Vouchers com geracao, filtros, CSV, desativacao e folha impressa.
+- Historico de pagamentos com CSV.
+- Eventos ao vivo com snapshot operacional.
+- Logs operacionais/auditoria com CSV.
+- Backup manual quando Postgres esta configurado.
+- Validacao protegida de restore, sem executar restore destrutivo pela API.
+
+As acoes mutaveis do admin local registram auditoria em modo best-effort:
+falha ao gravar log nao derruba a acao principal. No store em memoria os logs
+vivem durante o processo; no Postgres usam a tabela local `logs`.
+
+## Expiracao de Sessao
+
+O schema e as APIs ja representam `fim_acesso`, e o pacote `internal/jobs`
+expoe o hook `ExpireSessions` para stores que implementem expiracao ativa. A
+ativacao recorrente e a chamada de `ndsctl deauth` permanecem como proximo
+passo operacional.

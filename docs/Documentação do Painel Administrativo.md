@@ -1,77 +1,225 @@
-# **Documentação do Painel Administrativo (Frontend & Backend)**
+# Documentacao do Painel Administrativo Local
 
-## **1\. Visão Geral**
+## Escopo
 
-O Painel Administrativo é a interface de gestão exclusiva para o dono do provedor (Administrador). Ele não fica hospedado na nuvem, mas sim localmente no Notebook (Servidor Python).
+O admin cloud esta pausado. Esta documentacao trata apenas do admin local do no
+Astrolink.
 
-* **Como Acessar:** Pelo navegador do próprio Notebook (ou de um dispositivo autorizado na rede local) através do endereço http://localhost:8000/admin ou http://10.0.0.10:8000/admin.  
-* **Objetivo:** Acompanhar o faturamento, gerar Vouchers para vendas em dinheiro e gerenciar os usuários conectados.
+Nesta fase existe uma primeira interface visual do admin local no app SvelteKit:
 
-## **2\. Segurança e Autenticação (Backend)**
+```text
+http://127.0.0.1:5173/painel
+```
 
-Como o painel roda na mesma rede em que os clientes estão conectados, a segurança é primordial.
+Ela usa as credenciais configuradas em `ADMIN_USUARIO` e `ADMIN_SENHA`.
+As rotas admin, exceto login e refresh, exigem `Authorization: Bearer <access_token>`.
 
-* **Proteção de Rotas:** Todas as rotas que começam com /api/admin/... ou /admin/... exigirão autenticação.  
-* **Método:** Autenticação baseada em Sessão (Cookies) ou Token JWT (JSON Web Token).  
-* **Credenciais Únicas:** Haverá apenas um usuário (o Administrador) configurado diretamente no arquivo .env do Python, sem necessidade de tabela de "funcionários" no banco de dados para simplificar.  
-  * Exemplo no .env: ADMIN\_USER="astrolink", ADMIN\_PASS="senha\_super\_segura"
+## Endpoints Implementados
 
-## **3\. Estrutura do Frontend (Telas do Admin)**
+### Autenticacao
 
-O painel será construído com **HTML/CSS (TailwindCSS)** e **JavaScript**, com um design "Dashboard" limpo, preferencialmente em modo escuro (Dark Mode) para conforto visual.
+`POST /admin/auth/login`
 
-### **Tela 1: Login**
+```json
+{
+  "usuario": "admin",
+  "senha": "admin123",
+  "totp_codigo": "123456"
+}
+```
 
-* **Elementos:** Campo de Usuário, Campo de Senha, Botão "Entrar".  
-* **Ação:** O JS envia as credenciais para o backend. Se correto, recebe um Token de acesso e redireciona para o Dashboard.
+`totp_codigo` e enviado apenas quando o 2FA opcional esta habilitado.
 
-### **Tela 2: Dashboard (Visão Geral)**
+Resposta:
 
-* **Elementos:**  
-  * **Cards de Métricas:** \* "Faturamento Hoje (PIX \+ Dinheiro)"  
-    * "Usuários Online Agora"  
-    * "Vouchers Disponíveis"  
-  * **Gráfico Simples (Opcional):** Vendas dos últimos 7 dias.
+```json
+{
+  "access_token": "...",
+  "refresh_token": "...",
+  "expires_in": 28800,
+  "token_type": "Bearer"
+}
+```
 
-### **Tela 3: Gestão de Vouchers (A Tela do Dinheiro)**
+O access token e um JWT HS256 com validade de 8 horas. O refresh token e opaco,
+armazenado como hash no no local, com validade de 30 dias.
 
-* **Elementos:**  
-  * **Formulário de Geração:** Select para escolher o plano (ex: 24 Horas) e input para "Quantidade" (ex: gerar 5 códigos). Botão "Gerar Vouchers".  
-  * **Área de Resultado:** Um quadro grande mostrando os códigos recém-gerados (ex: A7X-92P, M4K-1LW) com um botão de "Imprimir" ou "Copiar".  
-  * **Tabela de Histórico:** Lista dos últimos vouchers gerados, mostrando o Status (disponivel ou usado) e quando foi ativado.
+O login aplica bloqueio local por usuario/IP depois de 5 falhas em 15 minutos.
+Enquanto bloqueado, retorna `429 login_bloqueado` e nao cria sessao.
+Quando `ADMIN_TOTP_SECRET` esta configurado, o backend exige `totp_codigo`;
+sem codigo retorna `428 totp_obrigatorio`, e codigo invalido conta como falha
+de login.
 
-### **Tela 4: Gestão de Clientes (Controle da Rede)**
+`POST /admin/auth/refresh`
 
-* **Elementos:**  
-  * **Tabela de Usuários Ativos:** Mostra o MAC Address, o Plano que compraram, se foi PIX ou Voucher, e uma contagem regressiva de quanto tempo falta para a internet deles cair.  
-  * **Botão "Derrubar" (Kick):** Um botão vermelho ao lado de cada usuário.  
-* **Ação:** Se você suspeitar que alguém burlou a rede ou precisa derrubar um cliente, clica no botão. O JS chama a rota de "kick" no Backend, que entra via SSH no roteador e corta a internet do MAC Address na hora.
+Renova access token e refresh token.
 
-## **4\. Endpoints do Backend (API Admin)**
+`POST /admin/auth/logout`
 
-O servidor FastAPI (Python) terá um conjunto de rotas separadas apenas para o painel.
+Revoga o refresh token informado. Requer Bearer token.
 
-### **4.1. Autenticação**
+`GET /admin/auth/me`
 
-* **POST /api/admin/login**  
-  * **Ação:** Valida o usuário e senha com as variáveis do .env. Retorna um token JWT ou define um Cookie de sessão seguro.
+Retorna o usuario autenticado.
 
-### **4.2. Dados do Dashboard**
+### Saude do Sistema
 
-* **GET /api/admin/dashboard-stats**  
-  * **Ação:** Faz consultas COUNT e SUM no banco SQLite para retornar o faturamento do dia e total de clientes ativos.  
-  * **Retorno:** {"faturamento\_hoje": 150.00, "online\_agora": 12}
+`GET /admin/sistema/saude`
 
-### **4.3. Módulo de Vouchers**
+Retorna status do banco e placeholders de Redis, RabbitMQ, Mercado Pago e
+roteador.
 
-* **POST /api/admin/gerar-vouchers**  
-  * **Ação:** Recebe {"plano\_id": 2, "quantidade": 5}. Gera códigos alfanuméricos aleatórios (excluindo letras que confundem, como 'O' e '0'), insere na tabela vouchers e retorna a lista.  
-* **GET /api/admin/vouchers**  
-  * **Ação:** Retorna a lista paginada dos vouchers para preencher a tabela de histórico.
+### Setup Local
 
-### **4.4. Módulo de Controle de Rede**
+`GET /admin/setup/status`
 
-* **GET /api/admin/usuarios-ativos**  
-  * **Ação:** Retorna todos os usuários onde status \== 'ativo'.  
-* **POST /api/admin/derrubar-usuario**  
-  * **Ação:** Recebe um mac\_address. Altera o status dele no SQLite para bloqueado, zera o fim\_acesso e **executa imediatamente o comando ndsctl deauth \<MAC\> via SSH no roteador OpenWrt**.
+Retorna o status redigido da configuracao local usada pelo assistente de setup.
+A rota exige Bearer token. Campos secretos, como tokens Mercado Pago, segredo de
+webhook, senha admin, TOTP e chave SSH, nunca retornam em texto; eles aparecem
+somente como `configured: true` ou `configured: false`.
+
+`PUT /admin/setup/env`
+
+Atualiza chaves permitidas do `.env` local. A rota exige Bearer token e so grava
+quando `ASTROLINK_ALLOW_ENV_WRITE=true`; por padrao a escrita fica desabilitada.
+O arquivo alvo tem default `.env`; para usar outro arquivo, defina
+`ASTROLINK_ENV_FILE` no processo antes de iniciar o node. O backend le esse
+arquivo no startup, preservando prioridade para variaveis ja definidas no
+processo.
+
+Use o painel como alternativa local controlada. O fluxo recomendado continua
+sendo executar o CLI dentro de `node/`:
+
+```powershell
+go run ./cmd/setup
+```
+
+Toda alteracao feita pelo painel ou CLI exige reiniciar o node para valer. O
+admin cloud continua fora de escopo nesta fase.
+
+### Planos
+
+`GET /admin/planos`
+
+Lista todos os planos cadastrados.
+
+`POST /admin/planos`
+
+Cria plano local.
+
+`PUT /admin/planos/:id`
+
+Atualiza plano local.
+
+`PATCH /admin/planos/:id/status`
+
+Ativa ou desativa plano local.
+
+### Usuarios
+
+`GET /admin/usuarios`
+
+Lista ate 200 usuarios conhecidos pelo no local.
+
+### Desconectar Usuario
+
+`POST /admin/usuarios/:mac/desconectar`
+
+Chama o gateway OpenNDS para executar `ndsctl deauth <mac>` quando habilitado.
+
+### Vouchers
+
+`GET /admin/vouchers`
+
+Lista os vouchers emitidos, com filtros por status, plano, codigo e lote.
+
+`POST /admin/vouchers/gerar`
+
+Gera um lote de vouchers para venda presencial.
+
+```json
+{
+  "plano_id": 2,
+  "quantidade": 10,
+  "tipo": "single_use",
+  "validade_dias": 30,
+  "prefixo": "VIP"
+}
+```
+
+`PATCH /admin/vouchers/:id/desativar`
+
+Desativa voucher ainda ativo.
+
+`GET /admin/vouchers/export.csv`
+
+Exporta os vouchers filtrados em CSV. A tela tambem oferece impressao de folha
+PDF/impressao de vouchers a partir da lista atual, com resumo de lote, plano,
+usos, validade e instrucoes para recorte.
+
+### Pagamentos
+
+`GET /admin/pagamentos`
+
+Lista historico local de cobrancas PIX e totais por status.
+
+`GET /admin/pagamentos/export.csv`
+
+Exporta pagamentos filtrados em CSV.
+
+### Logs
+
+`GET /admin/logs`
+
+Lista eventos operacionais locais e auditoria best-effort das acoes mutaveis do
+admin local, como planos, vouchers, backup, restore e desconexao de usuario.
+
+`GET /admin/logs/export.csv`
+
+Exporta logs filtrados em CSV.
+
+### Eventos ao Vivo
+
+`GET /admin/eventos`
+
+Stream SSE protegido usado pela tela de eventos ao vivo. O painel consome essa
+rota com `fetch` autenticado por Bearer token e exibe snapshots de usuarios,
+vouchers, PIX e logs.
+
+### Backup e Restore
+
+`POST /admin/backup`
+
+Solicita backup manual. No store em memoria retorna `501 backup_indisponivel`.
+
+`POST /admin/backup/restaurar`
+
+Valida `arquivo` e confirmacao literal `RESTAURAR`. O restore destrutivo nao e
+executado pela API nesta fase; com confirmacao correta retorna
+`501 restore_indisponivel`.
+
+## Tela Implementada
+
+O painel local cobre:
+
+- login com access token e refresh token
+- campo 2FA sob demanda quando o backend exige TOTP
+- dashboard de saude
+- tabela de usuarios
+- botao de desconectar usuario
+- CRUD de planos
+- geracao, filtros, CSV, desativacao e impressao de vouchers
+- folha PDF/impressao de vouchers com tickets de recorte
+- historico de pagamentos e exportacao CSV
+- eventos ao vivo com snapshot operacional
+- logs operacionais/auditoria e exportacao CSV
+- backup manual e validacao protegida de restore
+- status de setup local e escrita opcional do `.env` quando liberada por env
+
+## Proxima Etapa Recomendada
+
+Evoluir o admin local com:
+
+- agendamento automatico de jobs operacionais
+
+O admin cloud continua fora desta fase.

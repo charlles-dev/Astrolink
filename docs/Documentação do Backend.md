@@ -1,98 +1,138 @@
-# **Documentação do Backend: Servidor Python (Hotspot Híbrido: PIX \+ Vouchers)**
+# Documentacao do Backend
 
-## **1\. Visão Geral e Responsabilidades**
+## Stack
 
-O servidor Backend funcionará no computador portátil ligado à rede local (atrás do roteador OpenWrt). Ele é o responsável por orquestrar toda a lógica de negócio do seu provedor de Wi-Fi.
+- Linguagem: Go 1.22+
+- HTTP: Fiber
+- Banco: Postgres ou store em memoria para desenvolvimento rapido
+- Roteador: OpenNDS via SSH/`ndsctl`
+- Pagamentos: provider demo por padrao, provider Mercado Pago para criacao PIX real e reconciliacao de webhook quando configurado
 
-**Principais funções:**
+Codigo fonte: `node/`
 
-1. Servir os ficheiros HTML/JS do Frontend (Captive Portal).  
-2. Gerar os códigos PIX comunicando com a API bancária.  
-3. **Validar códigos PIN (Vouchers) inseridos por clientes que pagaram em dinheiro físico.**  
-4. Comunicar com o roteador (OpenNDS) para libertar ou bloquear o acesso à internet de um endereço MAC.  
-5. Gerir o tempo limite de cada utilizador e cortar o acesso quando o tempo expirar.
+## Estrutura
 
-## **2\. Stack Tecnológica**
+```text
+node/
+  cmd/server/              entrada da aplicacao
+  cmd/setup/               assistente local para criar/atualizar .env
+  internal/api/            servidor Fiber
+  internal/api/portal/     rotas publicas do portal
+  internal/api/admin/      rotas iniciais do admin local
+  internal/config/         leitura de variaveis de ambiente
+  internal/domain/         regras de planos e vouchers
+  internal/gateway/        OpenNDS, SSH e no-op
+  internal/infra/memory/   store em memoria
+  internal/infra/postgres/ store Postgres
+  internal/store/          contratos de persistencia
+  migrations/              schema SQL
+```
 
-* **Linguagem:** Python 3.10+  
-* **Framework Web:** FastAPI (extremamente rápido e nativamente assíncrono).  
-* **Servidor ASGI:** Uvicorn (para correr a aplicação FastAPI).  
-* **Base de Dados:** SQLite (via biblioteca SQLAlchemy para ORM).  
-* **Agendador de Tarefas:** APScheduler (para verificar de minuto a minuto quem tem o tempo expirado).
+## Endpoints Implementados
 
-## **3\. Estrutura da Base de Dados (Resumo)**
+### Publicos
 
-*(Veja o ficheiro documentacao\_banco\_dados.md para a estrutura completa).*
+- `GET /api/saude`
+- `GET /api/settings`
+- `GET /api/planos`
+- `GET /api/sessao/status?mac=...`
+- `POST /api/pix/gerar`
+- `GET /api/pix/status/:txid`
+- `GET /api/pix/aguardar/:txid`
+- `POST /api/voucher/resgatar`
 
-O backend irá interagir com 4 tabelas principais:
+### Admin local inicial
 
-* usuarios: Identificados pelo MAC Address.  
-* planos: Os pacotes disponíveis para venda via PIX.  
-* transacoes\_pix: Guarda o ID do PIX e verifica se já foi pago (Polling).  
-* **vouchers (Novo):** Guarda os códigos alfanuméricos gerados pelo administrador para venda em dinheiro vivo.
+- `POST /admin/auth/login`
+- `POST /admin/auth/refresh`
+- `POST /admin/auth/logout`
+- `GET /admin/auth/me`
+- `GET /admin/sistema/saude`
+- `GET /admin/setup/status`
+- `PUT /admin/setup/env`
+- `GET /admin/planos`
+- `GET /admin/usuarios`
+- `GET /admin/vouchers`
+- `POST /admin/vouchers/gerar`
+- `POST /admin/usuarios/:mac/desconectar`
 
-## **4\. Endpoints (Rotas da API)**
+## Configuracao
 
-O sistema agora possui rotas divididas em três categorias: Rotas Públicas (Frontend), Rotas de Negócio (PIX e Vouchers) e Rotas de Administração.
+Variaveis principais:
 
-### **4.1. Rotas de Interface (Frontend)**
+```env
+GO_ENV=development
+HTTP_ADDR=:5000
+ASTROLINK_ALLOW_ENV_WRITE=false
+DATABASE_URL=postgres://astrolink:devpassword@localhost:5432/astrolink?sslmode=disable
+ADMIN_USUARIO=admin
+ADMIN_SENHA=admin123
+ADMIN_TOTP_SECRET=
+JWT_SECRET=dev-jwt-secret-nao-usar-em-producao-32chars
+PAYMENTS_PROVIDER=demo
+MERCADOPAGO_ACCESS_TOKEN=TEST-XXXX-XXXX-XXXX
+MERCADOPAGO_API_BASE_URL=
+MERCADOPAGO_PAYER_EMAIL=cliente@example.com
+MERCADOPAGO_WEBHOOK_SECRET=test-webhook-secret
+NODE_NAME=dev-node-01
+OPENNDS_ENABLED=false
+OPENNDS_SSH_HOST=192.168.1.1
+OPENNDS_SSH_PORT=22
+OPENNDS_SSH_USER=root
+OPENNDS_SSH_KEY_PATH=C:\Users\charl\.ssh\id_ed25519
+OPENNDS_AUTH_RETRIES=3
+```
 
-* **GET /login**  
-  * **Ação:** Retorna o ficheiro index.html. É a primeira rota chamada pelo OpenNDS.
+Para setup local, prefira o assistente CLI:
 
-### **4.2. Rotas de Negócio (PIX)**
+```powershell
+cd node
+go run ./cmd/setup
+```
 
-* **POST /api/gerar-pix**  
-  * **Ação:** Recebe o mac\_address e o plano\_id. Cria a intenção de pagamento no MercadoPago, ativa o "Walled Garden" (10 minutos) no roteador e retorna o QR Code.  
-* **GET /api/status-pix/{txid}**  
-  * **Ação:** Rota de *Polling* para o telemóvel do cliente verificar se o PIX já "caiu". Liberta a internet total se o status for "pago".
+O CLI cria ou atualiza `.env` por padrao. Para usar outro arquivo, rode
+`go run ./cmd/setup -env-file caminho\\.env` ou defina `ASTROLINK_ENV_FILE` no
+processo antes de iniciar o node. Ele e o caminho recomendado para dados
+pessoais e segredos de instalacao local, incluindo Mercado Pago, admin,
+banco/local e OpenNDS. No startup, o backend tambem consulta esse arquivo antes
+de montar a config em memoria; variaveis ja definidas no processo continuam
+tendo prioridade.
 
-### **4.3. Rotas de Negócio (Vouchers / Dinheiro Físico)**
+`ASTROLINK_ALLOW_ENV_WRITE=false` impede escrita de `.env` pela API/painel. Para
+habilitar a escrita web em um no local confiavel, defina
+`ASTROLINK_ALLOW_ENV_WRITE=true` antes de iniciar o backend. Mesmo assim, a API
+de setup nunca deve retornar segredos em texto: campos sensiveis aparecem apenas
+como configurados ou nao configurados.
 
-* **POST /api/resgatar-voucher**  
-  * **Ação:** Recebe o mac\_address e o codigo (PIN) digitado pelo cliente.  
-  * **Lógica Interna:** 1\. Procura o código na tabela vouchers.  
-    2\. Se o status for disponivel, muda para usado.  
-    3\. Regista o mac\_address\_usado e a data\_uso.  
-    4\. Atualiza o utilizador para ativo e calcula o fim\_acesso com base na duração do voucher.  
-    5\. Dispara o comando de liberação para o OpenNDS (ndsctl auth \<MAC\>).  
-  * **Retorno:** JSON indicando {"sucesso": true} ou {"sucesso": false, "erro": "Código inválido"}.
+Alteracoes no `.env` nao mudam a configuracao em memoria. Reinicie o node depois
+de usar o CLI ou `PUT /admin/setup/env`.
 
-### **4.4. Rotas de Administração (Apenas para o Dono)**
+Para criar PIX real e consultar detalhes de pagamento no webhook Mercado Pago,
+use:
 
-Estas rotas devem ter uma proteção simples (como uma password no cabeçalho ou um ecrã de login separado) para que os clientes não acedam.
+```env
+PAYMENTS_PROVIDER=mercadopago
+MERCADOPAGO_ACCESS_TOKEN=<access-token>
+MERCADOPAGO_PAYER_EMAIL=<email-do-pagador-padrao>
+MERCADOPAGO_WEBHOOK_SECRET=<webhook-secret>
+```
 
-* **POST /api/admin/gerar-voucher**  
-  * **Ação:** Gera um ou mais códigos aleatórios (ex: K9M-3XT) vinculados a uma duração específica.  
-  * **Parâmetros Esperados:** {"duracao\_minutos": 60, "quantidade": 1}  
-  * **Retorno:** A lista de códigos gerados para o administrador anotar ou imprimir.
+`MERCADOPAGO_API_BASE_URL` e opcional e serve para testes/stubs; vazio usa
+`https://api.mercadopago.com`.
 
-## **5\. Como o Python "Conversa" com o Roteador (OpenNDS)**
+## OpenNDS
 
-Sempre que um PIX for confirmado ou um **Voucher for resgatado com sucesso**, o Python precisa executar um comando no roteador para abrir o acesso à internet.
+Quando `OPENNDS_ENABLED=false`, o backend usa `NoopController` e nao executa
+comandos no roteador. Isso deixa os testes e o desenvolvimento local simples.
 
-Como o Python está noutra máquina (10.0.0.10) e o roteador em outra (10.0.0.1), o método mais seguro é o Python enviar um comando via SSH usando a biblioteca paramiko:
+Quando `OPENNDS_ENABLED=true`, o backend tenta executar:
 
-import paramiko
+- `ndsctl auth <mac> <duracao>`
+- `ndsctl deauth <mac>`
 
-def libertar\_mac\_no\_roteador(mac\_address):  
-    cliente \= paramiko.SSHClient()  
-    cliente.set\_missing\_host\_key\_policy(paramiko.AutoAddPolicy())  
-    \# Liga ao roteador OpenWrt  
-    cliente.connect('10.0.0.1', username='root', password='sua\_senha')  
-      
-    \# Executa o comando do OpenNDS para autorizar a navegação  
-    stdin, stdout, stderr \= cliente.exec\_command(f'ndsctl auth {mac\_address}')  
-    cliente.close()
+por SSH no roteador configurado.
 
-## **6\. Tarefas em Segundo Plano (Background Jobs)**
+## Proximas Pendencias do Backend
 
-Usando o APScheduler, o Python executa tarefas de manutenção invisíveis:
-
-1. **Job de Expiração de Acesso (Corre a cada 1 minuto):**  
-   * Faz uma query: SELECT mac\_address FROM usuarios WHERE status \= 'ativo' AND fim\_acesso \< AGORA().  
-   * Para cada utilizador expirado, altera o status para bloqueado no SQLite.  
-   * Aciona a função SSH executando o comando de corte: ndsctl deauth \<MAC\_ADDRESS\>.  
-     *(Nota: Isso afeta tanto quem pagou por PIX quanto quem usou Voucher. O corte é implacável baseado no tempo).*  
-2. **Job de Limpeza de PIX (Corre a cada 15 minutos):**  
-   * Cancela as transações PIX pendentes que já passaram do limite de 10 minutos.
+- Agendamento automatico de jobs operacionais.
+- Testes E2E com Postgres e OpenNDS simulado.
