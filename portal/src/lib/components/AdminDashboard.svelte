@@ -4,14 +4,20 @@
   import type { AdminLiveEvent, AdminLiveSnapshot } from './admin/AdminLiveEventsPanel.svelte'
   import type {
     AdminHealthResponse,
+    AdminBlacklistBody,
+    AdminBlacklistEntry,
     AdminLog,
     AdminLogFilters,
     AdminPayment,
     AdminPaymentFilters,
     AdminPaymentTotals,
     AdminPlanBody,
+    AdminRouter,
+    AdminRouterBody,
     AdminRestoreBackupBody,
     AdminUser,
+    AdminWalledGardenBody,
+    AdminWalledGardenEntry,
     AdminVoucher,
     AdminVoucherFilters,
     GenerateAdminVouchersBody,
@@ -34,6 +40,9 @@
   }
   export let logs: AdminLog[] = []
   export let logsTotal = 0
+  export let roteadores: AdminRouter[] = []
+  export let blacklist: AdminBlacklistEntry[] = []
+  export let walledGarden: AdminWalledGardenEntry[] = []
   export let setupStatus: SetupStatus | null = null
   export let liveConnected = false
   export let liveLastEventAt = ''
@@ -45,6 +54,16 @@
   export let setupMessage = ''
   export let onRefresh: () => void = () => {}
   export let onDisconnect: (mac: string) => void = () => {}
+  export let onExtendUser: (mac: string, minutos: number) => Promise<void> | void = () => {}
+  export let onBanUser: (mac: string, motivo: string) => Promise<void> | void = () => {}
+  export let onSaveRouter: (input: AdminRouterBody, id?: number) => Promise<void> | void = () => {}
+  export let onDeleteRouter: (id: number) => Promise<void> | void = () => {}
+  export let onDiagnoseRouter: (id: number) => Promise<void> | void = () => {}
+  export let onSpeedtestRouter: (id: number) => Promise<void> | void = () => {}
+  export let onAddBlacklist: (input: AdminBlacklistBody) => Promise<void> | void = () => {}
+  export let onDeleteBlacklist: (mac: string) => Promise<void> | void = () => {}
+  export let onAddWalledGarden: (input: AdminWalledGardenBody) => Promise<void> | void = () => {}
+  export let onDeleteWalledGarden: (id: number) => Promise<void> | void = () => {}
   export let onSavePlan: (input: AdminPlanBody, id?: number) => Promise<void> | void = () => {}
   export let onTogglePlanStatus: (id: number, ativo: boolean) => Promise<void> | void = () => {}
   export let onGenerateVouchers: (input: GenerateAdminVouchersBody) => void = () => {}
@@ -53,6 +72,8 @@
   export let onExportVouchers: (filters: AdminVoucherFilters) => void = () => {}
   export let onApplyPaymentFilters: (filters: AdminPaymentFilters) => void = () => {}
   export let onExportPayments: (filters: AdminPaymentFilters) => void = () => {}
+  export let onExportPaymentReport: (filters: AdminPaymentFilters) => void = () => {}
+  export let onExportPaymentReportPDF: (filters: AdminPaymentFilters) => void = () => {}
   export let onApplyLogFilters: (filters: AdminLogFilters) => void = () => {}
   export let onExportLogs: (filters: AdminLogFilters) => void = () => {}
   export let onCreateBackup: () => void = () => {}
@@ -81,6 +102,9 @@
     {pagamentosTotais}
     {logs}
     {logsTotal}
+    {roteadores}
+    {blacklist}
+    {walledGarden}
     {setupStatus}
     {liveConnected}
     {liveLastEventAt}
@@ -90,6 +114,16 @@
     {backupMessage}
     {setupMessage}
     {onDisconnect}
+    {onExtendUser}
+    {onBanUser}
+    {onSaveRouter}
+    {onDeleteRouter}
+    {onDiagnoseRouter}
+    {onSpeedtestRouter}
+    {onAddBlacklist}
+    {onDeleteBlacklist}
+    {onAddWalledGarden}
+    {onDeleteWalledGarden}
     {onSavePlan}
     {onTogglePlanStatus}
     {onGenerateVouchers}
@@ -98,6 +132,8 @@
     {onExportVouchers}
     {onApplyPaymentFilters}
     {onExportPayments}
+    {onExportPaymentReport}
+    {onExportPaymentReportPDF}
     {onApplyLogFilters}
     {onExportLogs}
     {onCreateBackup}

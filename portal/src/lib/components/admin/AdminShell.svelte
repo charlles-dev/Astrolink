@@ -3,6 +3,7 @@
     | 'overview'
     | 'usuarios'
     | 'planos'
+    | 'rede'
     | 'vouchers'
     | 'pagamentos'
     | 'setup'
@@ -48,6 +49,13 @@
       href: '/painel/planos',
       title: 'Catálogo de planos',
       description: 'Preço, validade, velocidade e publicação dos pacotes exibidos no portal.'
+    },
+    {
+      id: 'rede',
+      label: 'Rede',
+      href: '/painel/rede',
+      title: 'Rede local',
+      description: 'Roteadores, OpenNDS, blacklist e walled garden controlados pelo node local.'
     },
     {
       id: 'vouchers',

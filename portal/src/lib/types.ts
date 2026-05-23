@@ -159,11 +159,144 @@ export interface AdminUser {
   }
 }
 
+export interface AdminUserSession {
+  inicio_acesso?: string
+  fim_acesso?: string
+  plano?: {
+    id: number
+    nome: string
+  }
+  status: string
+  tempo_restante_segundos: number
+  dados_consumidos_mb: number
+  valor?: string
+  origem: string
+}
+
+export interface AdminUserDetail {
+  usuario: AdminUser
+  sessao_atual?: AdminUserSession
+  historico_sessoes: AdminUserSession[]
+  total_sessoes: number
+  total_gasto: string
+  ultima_visita?: string
+}
+
 export interface AdminUsersResponse {
   total: number
   page: number
   limit: number
   usuarios: AdminUser[]
+}
+
+export interface AdminExtendUserBody {
+  minutos: number
+}
+
+export interface AdminBanUserBody {
+  motivo: string
+}
+
+export interface AdminUserResponse {
+  usuario: AdminUser
+}
+
+export interface AdminRouter {
+  id: number
+  nome: string
+  ip: string
+  porta_ssh: number
+  usuario_ssh: string
+  chave_ssh_path?: string
+  status: string
+  ultimo_ping_ms?: number
+  ultimo_check_at?: string
+  versao_openwrt?: string
+  versao_opennds?: string
+  ativo: boolean
+  usuarios_ativos: number
+  created_at?: string
+  updated_at?: string
+}
+
+export interface AdminRouterBody {
+  nome: string
+  ip: string
+  porta_ssh: number
+  usuario_ssh: string
+  chave_ssh_path: string
+  ativo: boolean
+}
+
+export interface AdminRoutersResponse {
+  roteadores: AdminRouter[]
+}
+
+export interface AdminRouterResponse {
+  roteador: AdminRouter
+}
+
+export interface AdminRouterDiagnosticResponse {
+  status: string
+  roteador: Partial<AdminRouter>
+  diagnostico: unknown
+  erro?: string
+}
+
+export interface AdminSpeedtestResponse {
+  roteador_id: number
+  download_mbps: number
+  upload_mbps: number
+  status: string
+  mensagem: string
+  medido_em: string
+  roteador_status: string
+}
+
+export interface AdminBlacklistEntry {
+  id: number
+  mac: string
+  motivo?: string
+  criado_por: string
+  created_at?: string
+}
+
+export interface AdminBlacklistResponse {
+  blacklist: AdminBlacklistEntry[]
+  total: number
+}
+
+export interface AdminBlacklistBody {
+  mac: string
+  motivo: string
+}
+
+export interface AdminBlacklistEntryResponse {
+  entrada: AdminBlacklistEntry
+}
+
+export interface AdminWalledGardenEntry {
+  id: number
+  host: string
+  descricao?: string
+  tipo: string
+  sistema: boolean
+  created_at?: string
+}
+
+export interface AdminWalledGardenResponse {
+  walled_garden: AdminWalledGardenEntry[]
+  total: number
+}
+
+export interface AdminWalledGardenBody {
+  host: string
+  descricao: string
+  tipo: string
+}
+
+export interface AdminWalledGardenEntryResponse {
+  entrada: AdminWalledGardenEntry
 }
 
 export interface AdminVoucher {
@@ -248,6 +381,16 @@ export interface AdminPayment {
 }
 
 export interface AdminPaymentsResponse {
+  total: number
+  totais: AdminPaymentTotals
+  pagamentos: AdminPayment[]
+}
+
+export interface AdminPaymentReportResponse {
+  periodo: {
+    de: string
+    ate: string
+  }
   total: number
   totais: AdminPaymentTotals
   pagamentos: AdminPayment[]

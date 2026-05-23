@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/astrolink/node/internal/domain/planos"
 	"github.com/astrolink/node/internal/gateway"
+	"github.com/astrolink/node/internal/infra/memory"
 	"github.com/astrolink/node/internal/store"
 	"github.com/gofiber/fiber/v2"
 )
@@ -163,6 +166,150 @@ func TestRoteadorDiagnosticoHandler_RetornaDevSemCapacidade(t *testing.T) {
 	}
 	if got.Status != "dev/disabled" || got.Diagnostico.Online || len(got.Diagnostico.RecentLogs) != 0 {
 		t.Fatalf("diagnostico dev = %+v", got)
+	}
+}
+
+func TestRedeRoteadoresHandlers_GerenciamCadastroLocal(t *testing.T) {
+	app := fiber.New()
+	repo := memory.NewStore()
+	deps := Dependencies{Store: repo, Gateway: gateway.NoopController{}}
+	app.Get("/admin/rede/roteadores", roteadoresHandler(deps))
+	app.Post("/admin/rede/roteadores", criarRoteadorHandler(deps))
+	app.Put("/admin/rede/roteadores/:id", atualizarRoteadorHandler(deps))
+	app.Delete("/admin/rede/roteadores/:id", removerRoteadorHandler(deps))
+
+	createReq := httptest.NewRequest("POST", "/admin/rede/roteadores", strings.NewReader(`{
+		"nome":"Roteador Patio",
+		"ip":"192.168.1.2",
+		"porta_ssh":22,
+		"usuario_ssh":"root",
+		"chave_ssh_path":"",
+		"ativo":true
+	}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(createReq, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("status create = %d", resp.StatusCode)
+	}
+
+	var created struct {
+		Roteador store.AdminRoteador `json:"roteador"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Roteador.Nome != "Roteador Patio" || created.Roteador.IP != "192.168.1.2" {
+		t.Fatalf("roteador criado = %+v", created.Roteador)
+	}
+
+	updateReq := httptest.NewRequest("PUT", "/admin/rede/roteadores/2", strings.NewReader(`{
+		"nome":"Roteador Patio 2",
+		"ip":"192.168.1.22",
+		"porta_ssh":2222,
+		"usuario_ssh":"admin",
+		"chave_ssh_path":"/etc/astrolink/key",
+		"ativo":true
+	}`))
+	updateReq.Header.Set("Content-Type", "application/json")
+	resp, err = app.Test(updateReq, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusOK {
+		t.Fatalf("status update = %d", resp.StatusCode)
+	}
+
+	resp, err = app.Test(httptest.NewRequest("DELETE", "/admin/rede/roteadores/2", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("status delete = %d", resp.StatusCode)
+	}
+}
+
+func TestRedeListasHandlers_GerenciamBlacklistEWalledGarden(t *testing.T) {
+	app := fiber.New()
+	repo := memory.NewStore()
+	deps := Dependencies{Store: repo, Gateway: gateway.NoopController{}}
+	app.Get("/admin/rede/blacklist", blacklistHandler(deps))
+	app.Post("/admin/rede/blacklist", adicionarBlacklistHandler(deps, gateway.NoopController{}))
+	app.Delete("/admin/rede/blacklist/:mac", removerBlacklistHandler(deps))
+	app.Get("/admin/rede/walled-garden", walledGardenHandler(deps))
+	app.Post("/admin/rede/walled-garden", adicionarWalledGardenHandler(deps))
+	app.Delete("/admin/rede/walled-garden/:id", removerWalledGardenHandler(deps))
+
+	blacklistReq := httptest.NewRequest("POST", "/admin/rede/blacklist", strings.NewReader(`{
+		"mac":"AA:BB:CC:DD:EE:FF",
+		"motivo":"teste"
+	}`))
+	blacklistReq.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(blacklistReq, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("status blacklist = %d", resp.StatusCode)
+	}
+
+	var blacklist struct {
+		Entrada store.AdminBlacklistEntry `json:"entrada"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&blacklist); err != nil {
+		t.Fatal(err)
+	}
+	if blacklist.Entrada.MAC != "AA:BB:CC:DD:EE:FF" {
+		t.Fatalf("entrada blacklist = %+v", blacklist.Entrada)
+	}
+
+	gardenReq := httptest.NewRequest("POST", "/admin/rede/walled-garden", strings.NewReader(`{
+		"host":"status.astrolink.local",
+		"descricao":"Status local",
+		"tipo":"dominio"
+	}`))
+	gardenReq.Header.Set("Content-Type", "application/json")
+	resp, err = app.Test(gardenReq, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusCreated {
+		t.Fatalf("status walled garden = %d", resp.StatusCode)
+	}
+
+	var garden struct {
+		Entrada store.AdminWalledGardenEntry `json:"entrada"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&garden); err != nil {
+		t.Fatal(err)
+	}
+	if garden.Entrada.Host != "status.astrolink.local" || garden.Entrada.Sistema {
+		t.Fatalf("entrada garden = %+v", garden.Entrada)
+	}
+
+	resp, err = app.Test(httptest.NewRequest("DELETE", "/admin/rede/blacklist/AA:BB:CC:DD:EE:FF", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("status delete blacklist = %d", resp.StatusCode)
+	}
+
+	resp, err = app.Test(httptest.NewRequest("DELETE", "/admin/rede/walled-garden/"+strconv.Itoa(garden.Entrada.ID), nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != fiber.StatusNoContent {
+		t.Fatalf("status delete garden = %d", resp.StatusCode)
 	}
 }
 

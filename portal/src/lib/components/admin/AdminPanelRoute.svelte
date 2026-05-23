@@ -17,7 +17,13 @@
     AdminPayment,
     AdminPaymentFilters,
     AdminPaymentTotals,
+    AdminBlacklistBody,
+    AdminBlacklistEntry,
+    AdminRouter,
+    AdminRouterBody,
     AdminUser,
+    AdminWalledGardenBody,
+    AdminWalledGardenEntry,
     AdminVoucher,
     AdminVoucherFilters,
     AdminRestoreBackupBody,
@@ -43,6 +49,9 @@
   let pagamentosTotais: AdminPaymentTotals = emptyPaymentTotals()
   let logs: AdminLog[] = []
   let logsTotal = 0
+  let roteadores: AdminRouter[] = []
+  let blacklist: AdminBlacklistEntry[] = []
+  let walledGarden: AdminWalledGardenEntry[] = []
   let setupStatus: SetupStatus | null = null
   let liveConnected = false
   let liveLastEventAt = ''
@@ -118,7 +127,9 @@
       planos = nextPlanos.planos
       usuarios = nextUsuarios.usuarios
       vouchers = nextVouchers.vouchers
-      await Promise.allSettled([loadOperations(), loadSetupStatus()])
+      const optionalLoads = [loadOperations(), loadSetupStatus()]
+      if (activePage === 'rede') optionalLoads.push(loadNetwork())
+      await Promise.allSettled(optionalLoads)
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
       actionMessage = messageFromError(error, 'Não foi possível carregar o console')
@@ -163,6 +174,35 @@
     }
   }
 
+  async function loadNetwork() {
+    const [routersResult, blacklistResult, gardenResult] = await Promise.allSettled([
+      api.getAdminRouters(token),
+      api.getAdminBlacklist(token),
+      api.getAdminWalledGarden(token)
+    ])
+
+    if (routersResult.status === 'fulfilled') {
+      roteadores = routersResult.value.roteadores
+    } else if (!expireSessionIfUnauthorized(routersResult.reason)) {
+      roteadores = []
+      actionMessage = messageFromError(routersResult.reason, 'Roteadores indisponiveis no momento')
+    }
+
+    if (blacklistResult.status === 'fulfilled') {
+      blacklist = blacklistResult.value.blacklist
+    } else if (!expireSessionIfUnauthorized(blacklistResult.reason)) {
+      blacklist = []
+      actionMessage = messageFromError(blacklistResult.reason, 'Blacklist indisponivel no momento')
+    }
+
+    if (gardenResult.status === 'fulfilled') {
+      walledGarden = gardenResult.value.walled_garden
+    } else if (!expireSessionIfUnauthorized(gardenResult.reason)) {
+      walledGarden = []
+      actionMessage = messageFromError(gardenResult.reason, 'Walled garden indisponivel no momento')
+    }
+  }
+
   async function disconnect(mac: string) {
     if (!token) return
     loading = true
@@ -174,6 +214,181 @@
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
       actionMessage = messageFromError(error, 'Não foi possível desconectar o usuário')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function extendUser(mac: string, minutos: number) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      await api.extendAdminUsuario(token, mac, { minutos })
+      const result = await api.getAdminUsuarios(token)
+      usuarios = result.usuarios
+      actionMessage = `${minutos} minutos adicionados para ${mac}`
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel estender o acesso')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function banUser(mac: string, motivo: string) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      await api.banAdminUsuario(token, mac, { motivo })
+      const [usersResult, blacklistResult] = await Promise.all([
+        api.getAdminUsuarios(token),
+        api.getAdminBlacklist(token)
+      ])
+      usuarios = usersResult.usuarios
+      blacklist = blacklistResult.blacklist
+      actionMessage = `${mac} bloqueado na blacklist local`
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel bloquear o usuario')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function saveRouter(input: AdminRouterBody, id?: number) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      if (id) {
+        await api.updateAdminRouter(token, id, input)
+        actionMessage = 'Roteador atualizado'
+      } else {
+        await api.createAdminRouter(token, input)
+        actionMessage = 'Roteador cadastrado'
+      }
+      await loadNetwork()
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel salvar o roteador')
+      throw error
+    } finally {
+      loading = false
+    }
+  }
+
+  async function deleteRouter(id: number) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      await api.deleteAdminRouter(token, id)
+      await loadNetwork()
+      actionMessage = 'Roteador removido'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel remover o roteador')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function diagnoseRouter(id: number) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      const result = await api.diagnoseAdminRouter(token, id)
+      actionMessage =
+        result.status === 'online'
+          ? 'Diagnostico concluido: roteador online'
+          : `Diagnostico concluido: ${result.status}`
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel diagnosticar o roteador')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function speedtestRouter(id: number) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      const result = await api.speedtestAdminRouter(token, id)
+      actionMessage = result.mensagem
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel medir velocidade')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function addBlacklist(input: AdminBlacklistBody) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      await api.addAdminBlacklist(token, input)
+      await loadNetwork()
+      actionMessage = 'MAC adicionado a blacklist'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel adicionar a blacklist')
+      throw error
+    } finally {
+      loading = false
+    }
+  }
+
+  async function deleteBlacklist(mac: string) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      await api.deleteAdminBlacklist(token, mac)
+      await loadNetwork()
+      actionMessage = 'MAC removido da blacklist'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel remover da blacklist')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function addWalledGarden(input: AdminWalledGardenBody) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      await api.addAdminWalledGarden(token, input)
+      await loadNetwork()
+      actionMessage = 'Host adicionado ao walled garden'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel adicionar ao walled garden')
+      throw error
+    } finally {
+      loading = false
+    }
+  }
+
+  async function deleteWalledGarden(id: number) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    try {
+      await api.deleteAdminWalledGarden(token, id)
+      await loadNetwork()
+      actionMessage = 'Host removido do walled garden'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Nao foi possivel remover do walled garden')
     } finally {
       loading = false
     }
@@ -273,6 +488,40 @@
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
       actionMessage = messageFromError(error, 'Não foi possível exportar pagamentos')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function exportPaymentReport(filters: AdminPaymentFilters) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    paymentFilters = filters
+    try {
+      const csv = await api.exportAdminPagamentosRelatorio(token, filters)
+      downloadBlob(csv, 'astrolink-relatorio-pagamentos.csv')
+      actionMessage = 'Relatorio de pagamentos iniciado'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Não foi possível exportar relatório de pagamentos')
+    } finally {
+      loading = false
+    }
+  }
+
+  async function exportPaymentReportPDF(filters: AdminPaymentFilters) {
+    if (!token) return
+    loading = true
+    actionMessage = ''
+    paymentFilters = filters
+    try {
+      const pdf = await api.exportAdminPagamentosRelatorioPDF(token, filters)
+      downloadBlob(pdf, 'astrolink-relatorio-pagamentos.pdf')
+      actionMessage = 'Relatorio PDF iniciado'
+    } catch (error) {
+      if (expireSessionIfUnauthorized(error)) return
+      actionMessage = messageFromError(error, 'Não foi possível exportar relatório PDF')
     } finally {
       loading = false
     }
@@ -445,6 +694,9 @@
     pagamentosTotais = emptyPaymentTotals()
     logs = []
     logsTotal = 0
+    roteadores = []
+    blacklist = []
+    walledGarden = []
     setupStatus = null
     liveConnected = false
     liveLastEventAt = ''
@@ -623,6 +875,9 @@
     {pagamentosTotais}
     {logs}
     {logsTotal}
+    {roteadores}
+    {blacklist}
+    {walledGarden}
     {setupStatus}
     {liveConnected}
     {liveLastEventAt}
@@ -634,6 +889,16 @@
     {setupMessage}
     onRefresh={loadDashboard}
     onDisconnect={disconnect}
+    onExtendUser={extendUser}
+    onBanUser={banUser}
+    onSaveRouter={saveRouter}
+    onDeleteRouter={deleteRouter}
+    onDiagnoseRouter={diagnoseRouter}
+    onSpeedtestRouter={speedtestRouter}
+    onAddBlacklist={addBlacklist}
+    onDeleteBlacklist={deleteBlacklist}
+    onAddWalledGarden={addWalledGarden}
+    onDeleteWalledGarden={deleteWalledGarden}
     onSavePlan={savePlan}
     onTogglePlanStatus={togglePlanStatus}
     onGenerateVouchers={generateVouchers}
@@ -642,6 +907,8 @@
     onExportVouchers={exportVouchers}
     onApplyPaymentFilters={applyPaymentFilters}
     onExportPayments={exportPayments}
+    onExportPaymentReport={exportPaymentReport}
+    onExportPaymentReportPDF={exportPaymentReportPDF}
     onApplyLogFilters={applyLogFilters}
     onExportLogs={exportLogs}
     onCreateBackup={createBackup}

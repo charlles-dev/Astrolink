@@ -12,6 +12,8 @@
   export let loading = false
   export let onApplyPaymentFilters: (filters: AdminPaymentFilters) => void = () => {}
   export let onExportPayments: (filters: AdminPaymentFilters) => void = () => {}
+  export let onExportPaymentReport: (filters: AdminPaymentFilters) => void = () => {}
+  export let onExportPaymentReportPDF: (filters: AdminPaymentFilters) => void = () => {}
 
   let status: AdminPaymentFilters['status'] = ''
   let inicio = ''
@@ -41,6 +43,14 @@
 
   function exportCsv() {
     onExportPayments(currentFilters())
+  }
+
+  function exportReport() {
+    onExportPaymentReport(currentFilters())
+  }
+
+  function exportReportPDF() {
+    onExportPaymentReportPDF(currentFilters())
   }
 
   function formatMoney(value: string) {
@@ -150,6 +160,24 @@
         aria-label="Exportar pagamentos CSV"
       >
         Exportar CSV
+      </button>
+      <button
+        type="button"
+        class="btn btn-outline ghost-button"
+        onclick={exportReport}
+        disabled={loading}
+        aria-label="Exportar relatório de pagamentos CSV"
+      >
+        Relatório CSV
+      </button>
+      <button
+        type="button"
+        class="btn btn-outline ghost-button"
+        onclick={exportReportPDF}
+        disabled={loading}
+        aria-label="Exportar relatório de pagamentos PDF"
+      >
+        Relatório PDF
       </button>
     </div>
   </form>

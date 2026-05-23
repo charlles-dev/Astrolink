@@ -21,12 +21,18 @@ type Store struct {
 	vouchers      map[string]vouchers.Voucher
 	usuarios      map[string]store.Usuario
 	pix           map[string]store.PixTransaction
+	roteadores    map[int]store.AdminRoteador
+	blacklist     map[string]store.AdminBlacklistEntry
+	walledGarden  map[int]store.AdminWalledGardenEntry
 	adminSessions map[string]store.AdminSession
 	adminFailures map[string][]time.Time
 	adminLogs     []store.AdminLog
 	nextPlanoID   int
 	nextVoucherID int
 	nextLoteID    int
+	nextRouterID  int
+	nextListID    int
+	nextGardenID  int
 }
 
 func NewStore() *Store {
@@ -48,6 +54,25 @@ func NewStore() *Store {
 			"TEST-1234": {ID: 1, Codigo: "TEST-1234", PlanoID: 2, Tipo: vouchers.TipoSingleUse, Ativo: true, ValidadeEm: &expires, CreatedAt: now.Add(-2 * time.Minute)},
 			"UNIV-0000": {ID: 2, Codigo: "UNIV-0000", PlanoID: 1, Tipo: vouchers.TipoUniversal, UsosMaximos: &maxUses, Ativo: true, CreatedAt: now.Add(-time.Minute)},
 		},
+		roteadores: map[int]store.AdminRoteador{
+			1: {
+				ID:             1,
+				Nome:           "Roteador Principal",
+				IP:             "192.168.1.1",
+				PortaSSH:       22,
+				UsuarioSSH:     "root",
+				Status:         "unknown",
+				Ativo:          true,
+				UsuariosAtivos: 0,
+				CreatedAt:      now.Add(-time.Hour),
+				UpdatedAt:      now.Add(-time.Hour),
+			},
+		},
+		blacklist: map[string]store.AdminBlacklistEntry{},
+		walledGarden: map[int]store.AdminWalledGardenEntry{
+			1: {ID: 1, Host: "pagamentos.mercadopago.com", Descricao: "Pagamentos PIX", Tipo: "dominio", Sistema: true, CreatedAt: now.Add(-time.Hour)},
+			2: {ID: 2, Host: "api.mercadopago.com", Descricao: "API de pagamentos", Tipo: "dominio", Sistema: true, CreatedAt: now.Add(-time.Hour)},
+		},
 		usuarios:      map[string]store.Usuario{},
 		pix:           map[string]store.PixTransaction{},
 		adminSessions: map[string]store.AdminSession{},
@@ -55,6 +80,9 @@ func NewStore() *Store {
 		nextPlanoID:   4,
 		nextVoucherID: 3,
 		nextLoteID:    1,
+		nextRouterID:  2,
+		nextListID:    1,
+		nextGardenID:  3,
 	}
 }
 
@@ -135,6 +163,84 @@ func (s *Store) Usuarios(_ context.Context) ([]store.Usuario, error) {
 		result = append(result, usuario)
 	}
 	return result, nil
+}
+
+func (s *Store) UsuarioByMAC(ctx context.Context, mac string) (store.UsuarioDetalhe, bool, error) {
+	usuario, err := s.SessaoStatus(ctx, mac)
+	if err != nil {
+		return store.UsuarioDetalhe{}, false, err
+	}
+	if usuario.ID == 0 && usuario.Status == "walled_garden" {
+		return store.UsuarioDetalhe{}, false, nil
+	}
+	session := usuarioSessionFromUser(usuario)
+	detail := store.UsuarioDetalhe{
+		Usuario:          usuario,
+		HistoricoSessoes: []store.UsuarioSessao{},
+		TotalGasto:       "0.00",
+	}
+	if session != nil {
+		detail.SessaoAtual = session
+		detail.HistoricoSessoes = []store.UsuarioSessao{*session}
+		detail.TotalSessoes = 1
+		if usuario.FimAcesso != nil {
+			visit := *usuario.FimAcesso
+			detail.UltimaVisita = &visit
+		}
+	}
+	return detail, true, nil
+}
+
+func (s *Store) ExtendUsuario(_ context.Context, input store.ExtendUsuarioInput) (store.Usuario, error) {
+	if input.Minutos < 1 || input.Minutos > 525600 {
+		return store.Usuario{}, fmt.Errorf("minutos invalidos")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	mac := normalizeMAC(input.MAC)
+	usuario, ok := s.usuarios[mac]
+	if !ok {
+		return store.Usuario{}, store.ErrUsuarioNotFound
+	}
+	now := time.Now().UTC()
+	start := now
+	if usuario.FimAcesso != nil && usuario.FimAcesso.After(now) {
+		start = *usuario.FimAcesso
+	}
+	end := start.Add(time.Duration(input.Minutos) * time.Minute)
+	if usuario.InicioAcesso == nil {
+		usuario.InicioAcesso = &now
+	}
+	usuario.FimAcesso = &end
+	usuario.Status = "ativo"
+	usuario.TempoRestanteSegundos = int64(end.Sub(now).Seconds())
+	s.usuarios[mac] = usuario
+	return usuario, nil
+}
+
+func (s *Store) BanUsuario(_ context.Context, input store.BanUsuarioInput) (store.Usuario, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	mac := normalizeMAC(input.MAC)
+	usuario, ok := s.usuarios[mac]
+	if !ok {
+		usuario = store.Usuario{ID: len(s.usuarios) + 1, MAC: mac, Status: "walled_garden"}
+	}
+	usuario.Status = "bloqueado"
+	usuario.TempoRestanteSegundos = 0
+	s.usuarios[mac] = usuario
+	s.ensureBlacklist()
+	if _, exists := s.blacklist[mac]; !exists {
+		s.blacklist[mac] = store.AdminBlacklistEntry{
+			ID:        s.nextListID,
+			MAC:       mac,
+			Motivo:    strings.TrimSpace(input.Motivo),
+			CriadoPor: "admin",
+			CreatedAt: time.Now().UTC(),
+		}
+		s.nextListID++
+	}
+	return usuario, nil
 }
 
 func (s *Store) SessaoStatus(_ context.Context, mac string) (store.Usuario, error) {
@@ -419,6 +525,167 @@ func (s *Store) GenerateVouchers(_ context.Context, input store.GenerateVouchers
 	}, nil
 }
 
+func (s *Store) AdminRoteadores(_ context.Context) ([]store.AdminRoteador, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]store.AdminRoteador, 0, len(s.roteadores))
+	activeByRouter := map[int]int{}
+	for _, usuario := range s.usuarios {
+		if usuario.Status == "ativo" && usuario.Roteador != nil {
+			activeByRouter[usuario.Roteador.ID]++
+		}
+	}
+	for _, router := range s.roteadores {
+		router.UsuariosAtivos = activeByRouter[router.ID]
+		result = append(result, router)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ID < result[j].ID
+	})
+	return result, nil
+}
+
+func (s *Store) CreateRoteador(_ context.Context, input store.AdminRoteadorInput) (store.AdminRoteador, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureRouters()
+	now := time.Now().UTC()
+	router := routerFromInput(s.nextRouterID, input, now)
+	s.nextRouterID++
+	s.roteadores[router.ID] = router
+	return router, nil
+}
+
+func (s *Store) UpdateRoteador(_ context.Context, id int, input store.AdminRoteadorInput) (store.AdminRoteador, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureRouters()
+	current, ok := s.roteadores[id]
+	if !ok {
+		return store.AdminRoteador{}, store.ErrRouterNotFound
+	}
+	next := routerFromInput(id, input, current.CreatedAt)
+	next.Status = current.Status
+	next.UltimoPingMS = current.UltimoPingMS
+	next.UltimoCheckAt = current.UltimoCheckAt
+	next.VersaoOpenWrt = current.VersaoOpenWrt
+	next.VersaoOpenNDS = current.VersaoOpenNDS
+	next.UpdatedAt = time.Now().UTC()
+	s.roteadores[id] = next
+	return next, nil
+}
+
+func (s *Store) DeleteRoteador(_ context.Context, id int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureRouters()
+	if _, ok := s.roteadores[id]; !ok {
+		return store.ErrRouterNotFound
+	}
+	delete(s.roteadores, id)
+	return nil
+}
+
+func (s *Store) AdminBlacklist(_ context.Context) ([]store.AdminBlacklistEntry, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]store.AdminBlacklistEntry, 0, len(s.blacklist))
+	for _, entry := range s.blacklist {
+		result = append(result, entry)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].CreatedAt.After(result[j].CreatedAt)
+	})
+	return result, nil
+}
+
+func (s *Store) AddBlacklist(_ context.Context, input store.AdminBlacklistInput) (store.AdminBlacklistEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureBlacklist()
+	mac := normalizeMAC(input.MAC)
+	if existing, ok := s.blacklist[mac]; ok {
+		return existing, nil
+	}
+	entry := store.AdminBlacklistEntry{
+		ID:        s.nextListID,
+		MAC:       mac,
+		Motivo:    strings.TrimSpace(input.Motivo),
+		CriadoPor: "admin",
+		CreatedAt: time.Now().UTC(),
+	}
+	s.nextListID++
+	s.blacklist[mac] = entry
+	if usuario, ok := s.usuarios[mac]; ok {
+		usuario.Status = "bloqueado"
+		usuario.TempoRestanteSegundos = 0
+		s.usuarios[mac] = usuario
+	}
+	return entry, nil
+}
+
+func (s *Store) DeleteBlacklist(_ context.Context, mac string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureBlacklist()
+	delete(s.blacklist, normalizeMAC(mac))
+	return nil
+}
+
+func (s *Store) AdminWalledGarden(_ context.Context) ([]store.AdminWalledGardenEntry, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]store.AdminWalledGardenEntry, 0, len(s.walledGarden))
+	for _, entry := range s.walledGarden {
+		result = append(result, entry)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Sistema != result[j].Sistema {
+			return result[i].Sistema
+		}
+		return result[i].Host < result[j].Host
+	})
+	return result, nil
+}
+
+func (s *Store) AddWalledGarden(_ context.Context, input store.AdminWalledGardenInput) (store.AdminWalledGardenEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureWalledGarden()
+	host := strings.ToLower(strings.TrimSpace(input.Host))
+	for _, entry := range s.walledGarden {
+		if entry.Host == host {
+			return entry, nil
+		}
+	}
+	entry := store.AdminWalledGardenEntry{
+		ID:        s.nextGardenID,
+		Host:      host,
+		Descricao: strings.TrimSpace(input.Descricao),
+		Tipo:      normalizeGardenType(input.Tipo),
+		Sistema:   false,
+		CreatedAt: time.Now().UTC(),
+	}
+	s.nextGardenID++
+	s.walledGarden[entry.ID] = entry
+	return entry, nil
+}
+
+func (s *Store) DeleteWalledGarden(_ context.Context, id int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ensureWalledGarden()
+	entry, ok := s.walledGarden[id]
+	if !ok {
+		return store.ErrRouterNotFound
+	}
+	if entry.Sistema {
+		return fmt.Errorf("entrada de sistema nao pode ser removida")
+	}
+	delete(s.walledGarden, id)
+	return nil
+}
+
 func (s *Store) CreateAdminSession(_ context.Context, input store.CreateAdminSessionInput) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -543,6 +810,33 @@ func (s *Store) ensureAdminFailures() {
 	}
 }
 
+func (s *Store) ensureRouters() {
+	if s.roteadores == nil {
+		s.roteadores = map[int]store.AdminRoteador{}
+	}
+	if s.nextRouterID == 0 {
+		s.nextRouterID = 1
+	}
+}
+
+func (s *Store) ensureBlacklist() {
+	if s.blacklist == nil {
+		s.blacklist = map[string]store.AdminBlacklistEntry{}
+	}
+	if s.nextListID == 0 {
+		s.nextListID = 1
+	}
+}
+
+func (s *Store) ensureWalledGarden() {
+	if s.walledGarden == nil {
+		s.walledGarden = map[int]store.AdminWalledGardenEntry{}
+	}
+	if s.nextGardenID == 0 {
+		s.nextGardenID = 1
+	}
+}
+
 func (s *Store) findPlano(id int) (planos.Plano, error) {
 	for _, plano := range s.planos {
 		if plano.ID == id {
@@ -550,6 +844,61 @@ func (s *Store) findPlano(id int) (planos.Plano, error) {
 		}
 	}
 	return planos.Plano{}, store.ErrPlanoNotFound
+}
+
+func usuarioSessionFromUser(usuario store.Usuario) *store.UsuarioSessao {
+	if usuario.Status == "" {
+		return nil
+	}
+	return &store.UsuarioSessao{
+		InicioAcesso:          usuario.InicioAcesso,
+		FimAcesso:             usuario.FimAcesso,
+		Plano:                 usuario.Plano,
+		Status:                usuario.Status,
+		TempoRestanteSegundos: usuario.TempoRestanteSegundos,
+		DadosConsumidosMB:     usuario.DadosConsumidosMB,
+		Origem:                "local",
+	}
+}
+
+func routerFromInput(id int, input store.AdminRoteadorInput, createdAt time.Time) store.AdminRoteador {
+	now := time.Now().UTC()
+	if createdAt.IsZero() {
+		createdAt = now
+	}
+	port := input.PortaSSH
+	if port == 0 {
+		port = 22
+	}
+	user := strings.TrimSpace(input.UsuarioSSH)
+	if user == "" {
+		user = "root"
+	}
+	status := "unknown"
+	if !input.Ativo {
+		status = "offline"
+	}
+	return store.AdminRoteador{
+		ID:           id,
+		Nome:         strings.TrimSpace(input.Nome),
+		IP:           strings.TrimSpace(input.IP),
+		PortaSSH:     port,
+		UsuarioSSH:   user,
+		ChaveSSHPath: strings.TrimSpace(input.ChaveSSHPath),
+		Status:       status,
+		Ativo:        input.Ativo,
+		CreatedAt:    createdAt,
+		UpdatedAt:    now,
+	}
+}
+
+func normalizeGardenType(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "ip", "subnet":
+		return strings.ToLower(strings.TrimSpace(kind))
+	default:
+		return "dominio"
+	}
 }
 
 func planoFromInput(id int, input store.AdminPlanoInput) planos.Plano {

@@ -5,6 +5,36 @@
   export let usuarios: AdminUser[] = []
   export let loading = false
   export let onDisconnect: (mac: string) => void = () => {}
+  export let onExtendUser: (mac: string, minutos: number) => Promise<void> | void = () => {}
+  export let onBanUser: (mac: string, motivo: string) => Promise<void> | void = () => {}
+
+  let extendMinutesByMac: Record<string, string> = {}
+  let banReasonByMac: Record<string, string> = {}
+
+  function extendMinutes(mac: string) {
+    return extendMinutesByMac[mac] ?? '60'
+  }
+
+  function banReason(mac: string) {
+    return banReasonByMac[mac] ?? 'Bloqueio manual'
+  }
+
+  function setExtendMinutes(mac: string, value: string) {
+    extendMinutesByMac = { ...extendMinutesByMac, [mac]: value }
+  }
+
+  function setBanReason(mac: string, value: string) {
+    banReasonByMac = { ...banReasonByMac, [mac]: value }
+  }
+
+  function extendAccess(mac: string) {
+    const minutos = Number(extendMinutes(mac)) || 60
+    onExtendUser(mac, minutos)
+  }
+
+  function banUser(mac: string) {
+    onBanUser(mac, banReason(mac).trim() || 'Bloqueio manual')
+  }
 </script>
 
 <section class="users-panel card" aria-labelledby="usuarios-title">
@@ -62,6 +92,40 @@
           </div>
 
           <div class="action-cell" role="cell">
+            <div class="inline-control">
+              <input
+                class="input input-bordered compact-input"
+                type="number"
+                min="1"
+                aria-label={`Minutos para ${usuario.mac}`}
+                value={extendMinutes(usuario.mac)}
+                oninput={(event) => setExtendMinutes(usuario.mac, event.currentTarget.value)}
+              />
+              <button
+                type="button"
+                class="btn btn-outline row-button"
+                disabled={loading}
+                onclick={() => extendAccess(usuario.mac)}
+              >
+                Estender
+              </button>
+            </div>
+            <div class="inline-control">
+              <input
+                class="input input-bordered reason-input"
+                aria-label={`Motivo do bloqueio para ${usuario.mac}`}
+                value={banReason(usuario.mac)}
+                oninput={(event) => setBanReason(usuario.mac, event.currentTarget.value)}
+              />
+              <button
+                type="button"
+                class="btn btn-error btn-outline row-button"
+                disabled={loading}
+                onclick={() => banUser(usuario.mac)}
+              >
+                Banir
+              </button>
+            </div>
             <button
               type="button"
               class="btn btn-outline row-button"
@@ -144,7 +208,7 @@
   .user-head,
   .user-row {
     display: grid;
-    grid-template-columns: minmax(180px, 1.35fr) minmax(160px, 1fr) minmax(92px, auto) minmax(88px, auto) minmax(112px, auto);
+    grid-template-columns: minmax(180px, 1.15fr) minmax(150px, 0.85fr) minmax(92px, auto) minmax(88px, auto) minmax(300px, auto);
     align-items: center;
     column-gap: 14px;
   }
@@ -225,6 +289,35 @@
     text-align: right;
   }
 
+  .action-cell {
+    display: grid;
+    justify-items: end;
+    gap: 7px;
+  }
+
+  .inline-control {
+    display: flex;
+    justify-content: flex-end;
+    gap: 7px;
+  }
+
+  .compact-input {
+    width: 76px;
+  }
+
+  .reason-input {
+    width: 150px;
+  }
+
+  .compact-input,
+  .reason-input {
+    min-height: 34px;
+    border-radius: 6px;
+    padding-inline: 10px;
+    font-size: 0.78rem;
+    font-weight: 800;
+  }
+
   .status-dot {
     width: 8px;
     height: 8px;
@@ -295,6 +388,7 @@
 
     .action-cell {
       text-align: right;
+      justify-items: end;
     }
   }
 
@@ -310,10 +404,19 @@
 
     .action-cell {
       text-align: left;
+      justify-items: stretch;
     }
 
-    .row-button {
+    .inline-control,
+    .row-button,
+    .compact-input,
+    .reason-input {
       width: 100%;
+    }
+
+    .inline-control {
+      display: grid;
+      grid-template-columns: 1fr;
     }
   }
 </style>

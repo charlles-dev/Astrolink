@@ -338,6 +338,73 @@ describe('createApiClient', () => {
     )
   })
 
+  it('loads and exports admin payment reports', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              periodo: { de: '2026-05-01T00:00:00Z', ate: '2026-06-01T00:00:00Z' },
+              total: 0,
+              totais: { pendente: 0, aprovado: 0, cancelado: 0, expirado: 0, valor_total: '0.00' },
+              pagamentos: []
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } }
+          )
+        )
+        .mockResolvedValueOnce(
+          new Response('txid,status\n', {
+            status: 200,
+            headers: { 'content-type': 'text/csv' }
+          })
+        )
+        .mockResolvedValueOnce(
+          new Response('%PDF-1.4\n', {
+            status: 200,
+            headers: { 'content-type': 'application/pdf' }
+          })
+        )
+    )
+
+    const api = createApiClient('')
+    const report = await api.getAdminPagamentosRelatorio('token-123', {
+      inicio: '2026-05-01',
+      fim: '2026-05-31'
+    })
+    const csv = await api.exportAdminPagamentosRelatorio('token-123', { status: 'aprovado' })
+    const pdf = await api.exportAdminPagamentosRelatorioPDF('token-123', { status: 'aprovado' })
+
+    expect(report.total).toBe(0)
+    expect(csv).toBeInstanceOf(Blob)
+    expect(pdf).toBeInstanceOf(Blob)
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      '/admin/pagamentos/relatorio?inicio=2026-05-01&fim=2026-05-31',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      '/admin/pagamentos/relatorio?status=aprovado&formato=csv',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      '/admin/pagamentos/relatorio?status=aprovado&formato=pdf',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+  })
+
   it('loads admin logs and exports them as CSV', async () => {
     vi.stubGlobal(
       'fetch',
@@ -555,6 +622,66 @@ describe('createApiClient', () => {
         method: 'PATCH',
         headers: expect.objectContaining({ Authorization: 'Bearer token-123' }),
         body: JSON.stringify({ ativo: false })
+      })
+    )
+  })
+
+  it('manages local network endpoints with bearer token', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ roteadores: [] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' }
+          })
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ entrada: { mac: 'AA:BB:CC:DD:EE:FF' } }), {
+            status: 201,
+            headers: { 'content-type': 'application/json' }
+          })
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ walled_garden: [] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' }
+          })
+        )
+    )
+
+    const api = createApiClient('')
+    await api.getAdminRouters('token-123')
+    await api.addAdminBlacklist('token-123', {
+      mac: 'AA:BB:CC:DD:EE:FF',
+      motivo: 'teste'
+    })
+    await api.getAdminWalledGarden('token-123')
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      '/admin/rede/roteadores',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
+      })
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      '/admin/rede/blacklist',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' }),
+        body: JSON.stringify({ mac: 'AA:BB:CC:DD:EE:FF', motivo: 'teste' })
+      })
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      '/admin/rede/walled-garden',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ Authorization: 'Bearer token-123' })
       })
     )
   })

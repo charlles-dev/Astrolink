@@ -92,6 +92,59 @@ func TestExportPagamentosCSVHandler_UsaFiltrosECabecalho(t *testing.T) {
 	}
 }
 
+func TestPagamentosRelatorioHandler_AceitaParametrosDaDoc(t *testing.T) {
+	app, repo := newPagamentosTestApp()
+	mustCreatePix(t, repo, store.CreatePixInput{PlanoID: 2, MAC: "aa:bb:cc:dd:ee:04"})
+
+	req := httptest.NewRequest("GET", "/admin/pagamentos/relatorio?de=2000-01-01&ate=2999-12-31&formato=json", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(body))
+	}
+	var got struct {
+		Total      int                  `json:"total"`
+		Totais     store.AdminPixTotals `json:"totais"`
+		Pagamentos []struct {
+			MAC string `json:"mac"`
+		} `json:"pagamentos"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 1 || got.Totais.Pendente != 1 || got.Pagamentos[0].MAC != "AA:BB:CC:DD:EE:04" {
+		t.Fatalf("relatorio inesperado: %+v body=%s", got, string(body))
+	}
+}
+
+func TestPagamentosRelatorioHandler_GeraPDFLocal(t *testing.T) {
+	app, repo := newPagamentosTestApp()
+	mustCreatePix(t, repo, store.CreatePixInput{PlanoID: 2, MAC: "aa:bb:cc:dd:ee:05"})
+
+	req := httptest.NewRequest("GET", "/admin/pagamentos/relatorio?formato=pdf", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("status = %d body=%s", resp.StatusCode, string(body))
+	}
+	if contentType := resp.Header.Get("Content-Type"); !strings.Contains(contentType, "application/pdf") {
+		t.Fatalf("content-type = %q", contentType)
+	}
+	if !strings.HasPrefix(string(body), "%PDF-1.4") {
+		t.Fatalf("pdf invalido: %.20q", string(body))
+	}
+}
+
 func TestPagamentosHandler_ValidaFiltros(t *testing.T) {
 	app, _ := newPagamentosTestApp()
 
@@ -122,6 +175,7 @@ func newPagamentosTestApp() (*fiber.App, *memory.Store) {
 	deps := Dependencies{Config: config.Config{}, Store: repo}
 	app.Get("/admin/pagamentos", pagamentosHandler(deps))
 	app.Get("/admin/pagamentos/export.csv", exportPagamentosCSVHandler(deps))
+	app.Get("/admin/pagamentos/relatorio", pagamentosRelatorioHandler(deps))
 	return app, repo
 }
 

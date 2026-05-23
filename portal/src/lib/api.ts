@@ -1,19 +1,35 @@
 import type {
   GerarPixBody,
+  AdminBanUserBody,
+  AdminBlacklistBody,
+  AdminBlacklistEntryResponse,
+  AdminBlacklistResponse,
+  AdminExtendUserBody,
   AdminHealthResponse,
   AdminBackupResponse,
   AdminLogFilters,
   AdminLogsResponse,
   AdminPaymentFilters,
+  AdminPaymentReportResponse,
   AdminPaymentsResponse,
   AdminPlanBody,
   AdminPlanResponse,
+  AdminRouterBody,
+  AdminRouterDiagnosticResponse,
+  AdminRouterResponse,
+  AdminRoutersResponse,
   AdminRestoreBackupBody,
   AdminLoginBody,
   AdminLoginResponse,
+  AdminSpeedtestResponse,
+  AdminUserDetail,
+  AdminUserResponse,
   AdminVoucherFilters,
   AdminVoucherResponse,
   AdminVouchersResponse,
+  AdminWalledGardenBody,
+  AdminWalledGardenEntryResponse,
+  AdminWalledGardenResponse,
   AdminUsersResponse,
   GenerateAdminVouchersBody,
   GenerateAdminVouchersResponse,
@@ -135,6 +151,22 @@ export function createApiClient(baseURL = '') {
       request<AdminPlanResponse>('PATCH', `/admin/planos/${id}/status`, { ativo }, token),
     getAdminUsuarios: (token: string) =>
       request<AdminUsersResponse>('GET', '/admin/usuarios', undefined, token),
+    getAdminUsuarioDetail: (token: string, mac: string) =>
+      request<AdminUserDetail>('GET', `/admin/usuarios/${encodeURIComponent(mac)}`, undefined, token),
+    extendAdminUsuario: (token: string, mac: string, body: AdminExtendUserBody) =>
+      request<AdminUserResponse>(
+        'POST',
+        `/admin/usuarios/${encodeURIComponent(mac)}/estender`,
+        body,
+        token
+      ),
+    banAdminUsuario: (token: string, mac: string, body: AdminBanUserBody) =>
+      request<AdminUserResponse>(
+        'POST',
+        `/admin/usuarios/${encodeURIComponent(mac)}/banir`,
+        body,
+        token
+      ),
     disconnectAdminUsuario: (token: string, mac: string) =>
       request<{ sucesso: boolean }>(
         'POST',
@@ -142,6 +174,35 @@ export function createApiClient(baseURL = '') {
         {},
         token
       ),
+    getAdminRouters: (token: string) =>
+      request<AdminRoutersResponse>('GET', '/admin/rede/roteadores', undefined, token),
+    createAdminRouter: (token: string, body: AdminRouterBody) =>
+      request<AdminRouterResponse>('POST', '/admin/rede/roteadores', body, token),
+    updateAdminRouter: (token: string, id: number, body: AdminRouterBody) =>
+      request<AdminRouterResponse>('PUT', `/admin/rede/roteadores/${id}`, body, token),
+    deleteAdminRouter: (token: string, id: number) =>
+      request<unknown>('DELETE', `/admin/rede/roteadores/${id}`, undefined, token),
+    diagnoseAdminRouter: (token: string, id: number) =>
+      request<AdminRouterDiagnosticResponse>(
+        'POST',
+        `/admin/rede/roteadores/${id}/diagnostico`,
+        {},
+        token
+      ),
+    speedtestAdminRouter: (token: string, id: number) =>
+      request<AdminSpeedtestResponse>('POST', `/admin/rede/roteadores/${id}/speedtest`, {}, token),
+    getAdminBlacklist: (token: string) =>
+      request<AdminBlacklistResponse>('GET', '/admin/rede/blacklist', undefined, token),
+    addAdminBlacklist: (token: string, body: AdminBlacklistBody) =>
+      request<AdminBlacklistEntryResponse>('POST', '/admin/rede/blacklist', body, token),
+    deleteAdminBlacklist: (token: string, mac: string) =>
+      request<unknown>('DELETE', `/admin/rede/blacklist/${encodeURIComponent(mac)}`, undefined, token),
+    getAdminWalledGarden: (token: string) =>
+      request<AdminWalledGardenResponse>('GET', '/admin/rede/walled-garden', undefined, token),
+    addAdminWalledGarden: (token: string, body: AdminWalledGardenBody) =>
+      request<AdminWalledGardenEntryResponse>('POST', '/admin/rede/walled-garden', body, token),
+    deleteAdminWalledGarden: (token: string, id: number) =>
+      request<unknown>('DELETE', `/admin/rede/walled-garden/${id}`, undefined, token),
     getAdminVouchers: (token: string, filters?: AdminVoucherFilters) =>
       request<AdminVouchersResponse>('GET', `/admin/vouchers${buildQuery(filters)}`, undefined, token),
     deactivateAdminVoucher: (token: string, id: number) =>
@@ -159,6 +220,23 @@ export function createApiClient(baseURL = '') {
       ),
     exportAdminPagamentos: (token: string, filters?: AdminPaymentFilters) =>
       requestBlob(`/admin/pagamentos/export.csv${buildQuery(filters)}`, token),
+    getAdminPagamentosRelatorio: (token: string, filters?: AdminPaymentFilters) =>
+      request<AdminPaymentReportResponse>(
+        'GET',
+        `/admin/pagamentos/relatorio${buildQuery(filters)}`,
+        undefined,
+        token
+      ),
+    exportAdminPagamentosRelatorio: (token: string, filters?: AdminPaymentFilters) =>
+      requestBlob(
+        `/admin/pagamentos/relatorio${buildQuery({ ...filters, formato: 'csv' })}`,
+        token
+      ),
+    exportAdminPagamentosRelatorioPDF: (token: string, filters?: AdminPaymentFilters) =>
+      requestBlob(
+        `/admin/pagamentos/relatorio${buildQuery({ ...filters, formato: 'pdf' })}`,
+        token
+      ),
     getAdminLogs: (token: string, filters?: AdminLogFilters) =>
       request<AdminLogsResponse>('GET', `/admin/logs${buildQuery(filters)}`, undefined, token),
     exportAdminLogs: (token: string, filters?: AdminLogFilters) =>

@@ -206,6 +206,99 @@ func (s *Store) SessaoStatus(ctx context.Context, mac string) (store.Usuario, er
 	return usuario, nil
 }
 
+func (s *Store) UsuarioByMAC(ctx context.Context, mac string) (store.UsuarioDetalhe, bool, error) {
+	usuario, err := s.SessaoStatus(ctx, mac)
+	if err != nil {
+		return store.UsuarioDetalhe{}, false, err
+	}
+	if usuario.ID == 0 && usuario.Status == "walled_garden" {
+		return store.UsuarioDetalhe{}, false, nil
+	}
+	session := usuarioSessionFromUser(usuario)
+	detail := store.UsuarioDetalhe{
+		Usuario:          usuario,
+		HistoricoSessoes: []store.UsuarioSessao{},
+		TotalGasto:       "0.00",
+	}
+	if session != nil {
+		detail.SessaoAtual = session
+		detail.HistoricoSessoes = []store.UsuarioSessao{*session}
+		detail.TotalSessoes = 1
+		if usuario.FimAcesso != nil {
+			visit := *usuario.FimAcesso
+			detail.UltimaVisita = &visit
+		}
+	}
+	var total string
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(valor), 0)::text
+		FROM transacoes_pix
+		WHERE mac = $1::macaddr AND status = 'aprovado'`, normalizeMAC(mac)).Scan(&total); err == nil {
+		detail.TotalGasto = total
+	}
+	return detail, true, nil
+}
+
+func (s *Store) ExtendUsuario(ctx context.Context, input store.ExtendUsuarioInput) (store.Usuario, error) {
+	if input.Minutos < 1 || input.Minutos > 525600 {
+		return store.Usuario{}, fmt.Errorf("minutos invalidos")
+	}
+	row := s.db.QueryRowContext(ctx, `
+		UPDATE usuarios_mac
+		SET
+			status = 'ativo',
+			inicio_acesso = COALESCE(inicio_acesso, $2),
+			fim_acesso = GREATEST(COALESCE(fim_acesso, $2), $2) + ($3::text || ' minutes')::interval,
+			updated_at = $2
+		WHERE mac = $1::macaddr
+		RETURNING id, mac::text, COALESCE(ip_atual::text, ''), COALESCE(nome, ''),
+			status, inicio_acesso, fim_acesso, dados_consumidos_mb,
+			plano_id, (SELECT nome FROM planos WHERE id = usuarios_mac.plano_id),
+			roteador_id, (SELECT nome FROM roteadores WHERE id = usuarios_mac.roteador_id)`,
+		normalizeMAC(input.MAC), s.clock().UTC(), input.Minutos)
+	usuario, err := scanUsuario(row, s.clock())
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.Usuario{}, store.ErrUsuarioNotFound
+	}
+	if err != nil {
+		return store.Usuario{}, fmt.Errorf("estender usuario: %w", err)
+	}
+	return usuario, nil
+}
+
+func (s *Store) BanUsuario(ctx context.Context, input store.BanUsuarioInput) (store.Usuario, error) {
+	mac := normalizeMAC(input.MAC)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return store.Usuario{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO blacklist_mac (mac, motivo, criado_por, created_at)
+		VALUES ($1::macaddr, NULLIF($2, ''), 'admin', $3)
+		ON CONFLICT (mac) DO UPDATE SET motivo = EXCLUDED.motivo`,
+		mac, strings.TrimSpace(input.Motivo), s.clock().UTC()); err != nil {
+		return store.Usuario{}, fmt.Errorf("registrar blacklist: %w", err)
+	}
+	row := tx.QueryRowContext(ctx, `
+		INSERT INTO usuarios_mac (mac, status, updated_at)
+		VALUES ($1::macaddr, 'bloqueado', $2)
+		ON CONFLICT (mac) DO UPDATE SET status = 'bloqueado', updated_at = EXCLUDED.updated_at
+		RETURNING id, mac::text, COALESCE(ip_atual::text, ''), COALESCE(nome, ''),
+			status, inicio_acesso, fim_acesso, dados_consumidos_mb,
+			plano_id, (SELECT nome FROM planos WHERE id = usuarios_mac.plano_id),
+			roteador_id, (SELECT nome FROM roteadores WHERE id = usuarios_mac.roteador_id)`,
+		mac, s.clock().UTC())
+	usuario, err := scanUsuario(row, s.clock())
+	if err != nil {
+		return store.Usuario{}, fmt.Errorf("bloquear usuario: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return store.Usuario{}, err
+	}
+	return usuario, nil
+}
+
 func (s *Store) CreatePix(ctx context.Context, input store.CreatePixInput) (store.PixTransaction, error) {
 	plano, err := s.findPlano(ctx, input.PlanoID)
 	if err != nil {
@@ -664,6 +757,185 @@ func (s *Store) GenerateVouchers(ctx context.Context, input store.GenerateVouche
 	}, nil
 }
 
+func (s *Store) AdminRoteadores(ctx context.Context) ([]store.AdminRoteador, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			r.id, r.nome, r.ip::text, r.porta_ssh, r.usuario_ssh, COALESCE(r.chave_ssh_path, ''),
+			r.status, r.ultimo_ping_ms, r.ultimo_check_at, COALESCE(r.versao_openwrt, ''),
+			COALESCE(r.versao_opennds, ''), r.ativo, r.created_at, r.updated_at,
+			COUNT(u.id) FILTER (WHERE u.status = 'ativo')::int AS usuarios_ativos
+		FROM roteadores r
+		LEFT JOIN usuarios_mac u ON u.roteador_id = r.id
+		GROUP BY r.id
+		ORDER BY r.id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("buscar roteadores: %w", err)
+	}
+	defer rows.Close()
+	var result []store.AdminRoteador
+	for rows.Next() {
+		router, err := scanAdminRoteador(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, router)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) CreateRoteador(ctx context.Context, input store.AdminRoteadorInput) (store.AdminRoteador, error) {
+	now := s.clock().UTC()
+	row := s.db.QueryRowContext(ctx, `
+		INSERT INTO roteadores (nome, ip, porta_ssh, usuario_ssh, chave_ssh_path, ativo, status, created_at, updated_at)
+		VALUES ($1, $2::inet, $3, $4, NULLIF($5, ''), $6, $7, $8, $8)
+		RETURNING id, nome, ip::text, porta_ssh, usuario_ssh, COALESCE(chave_ssh_path, ''),
+			status, ultimo_ping_ms, ultimo_check_at, COALESCE(versao_openwrt, ''),
+			COALESCE(versao_opennds, ''), ativo, created_at, updated_at, 0`,
+		strings.TrimSpace(input.Nome),
+		strings.TrimSpace(input.IP),
+		defaultSSHPort(input.PortaSSH),
+		defaultSSHUser(input.UsuarioSSH),
+		strings.TrimSpace(input.ChaveSSHPath),
+		input.Ativo,
+		routerInitialStatus(input.Ativo),
+		now,
+	)
+	router, err := scanAdminRoteador(row)
+	if err != nil {
+		return store.AdminRoteador{}, fmt.Errorf("criar roteador: %w", err)
+	}
+	return router, nil
+}
+
+func (s *Store) UpdateRoteador(ctx context.Context, id int, input store.AdminRoteadorInput) (store.AdminRoteador, error) {
+	row := s.db.QueryRowContext(ctx, `
+		UPDATE roteadores
+		SET nome = $2, ip = $3::inet, porta_ssh = $4, usuario_ssh = $5,
+			chave_ssh_path = NULLIF($6, ''), ativo = $7, updated_at = $8
+		WHERE id = $1
+		RETURNING id, nome, ip::text, porta_ssh, usuario_ssh, COALESCE(chave_ssh_path, ''),
+			status, ultimo_ping_ms, ultimo_check_at, COALESCE(versao_openwrt, ''),
+			COALESCE(versao_opennds, ''), ativo, created_at, updated_at,
+			(SELECT COUNT(*)::int FROM usuarios_mac WHERE roteador_id = roteadores.id AND status = 'ativo')`,
+		id,
+		strings.TrimSpace(input.Nome),
+		strings.TrimSpace(input.IP),
+		defaultSSHPort(input.PortaSSH),
+		defaultSSHUser(input.UsuarioSSH),
+		strings.TrimSpace(input.ChaveSSHPath),
+		input.Ativo,
+		s.clock().UTC(),
+	)
+	router, err := scanAdminRoteador(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.AdminRoteador{}, store.ErrRouterNotFound
+	}
+	if err != nil {
+		return store.AdminRoteador{}, fmt.Errorf("atualizar roteador: %w", err)
+	}
+	return router, nil
+}
+
+func (s *Store) DeleteRoteador(ctx context.Context, id int) error {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM roteadores WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("remover roteador: %w", err)
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return store.ErrRouterNotFound
+	}
+	return nil
+}
+
+func (s *Store) AdminBlacklist(ctx context.Context) ([]store.AdminBlacklistEntry, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, mac::text, COALESCE(motivo, ''), criado_por, created_at
+		FROM blacklist_mac
+		ORDER BY created_at DESC, id DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("buscar blacklist: %w", err)
+	}
+	defer rows.Close()
+	var result []store.AdminBlacklistEntry
+	for rows.Next() {
+		entry, err := scanAdminBlacklistEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, entry)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) AddBlacklist(ctx context.Context, input store.AdminBlacklistInput) (store.AdminBlacklistEntry, error) {
+	row := s.db.QueryRowContext(ctx, `
+		INSERT INTO blacklist_mac (mac, motivo, criado_por, created_at)
+		VALUES ($1::macaddr, NULLIF($2, ''), 'admin', $3)
+		ON CONFLICT (mac) DO UPDATE SET motivo = EXCLUDED.motivo
+		RETURNING id, mac::text, COALESCE(motivo, ''), criado_por, created_at`,
+		normalizeMAC(input.MAC), strings.TrimSpace(input.Motivo), s.clock().UTC())
+	entry, err := scanAdminBlacklistEntry(row)
+	if err != nil {
+		return store.AdminBlacklistEntry{}, fmt.Errorf("adicionar blacklist: %w", err)
+	}
+	_, _ = s.db.ExecContext(ctx, `UPDATE usuarios_mac SET status = 'bloqueado', updated_at = $2 WHERE mac = $1::macaddr`, entry.MAC, s.clock().UTC())
+	return entry, nil
+}
+
+func (s *Store) DeleteBlacklist(ctx context.Context, mac string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM blacklist_mac WHERE mac = $1::macaddr`, normalizeMAC(mac))
+	return err
+}
+
+func (s *Store) AdminWalledGarden(ctx context.Context) ([]store.AdminWalledGardenEntry, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, host, COALESCE(descricao, ''), tipo, sistema, created_at
+		FROM walled_garden
+		ORDER BY sistema DESC, host ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("buscar walled garden: %w", err)
+	}
+	defer rows.Close()
+	var result []store.AdminWalledGardenEntry
+	for rows.Next() {
+		entry, err := scanAdminWalledGardenEntry(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, entry)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) AddWalledGarden(ctx context.Context, input store.AdminWalledGardenInput) (store.AdminWalledGardenEntry, error) {
+	row := s.db.QueryRowContext(ctx, `
+		INSERT INTO walled_garden (host, descricao, tipo, sistema, created_at)
+		VALUES ($1, NULLIF($2, ''), $3, FALSE, $4)
+		ON CONFLICT (host) DO UPDATE SET descricao = EXCLUDED.descricao, tipo = EXCLUDED.tipo
+		RETURNING id, host, COALESCE(descricao, ''), tipo, sistema, created_at`,
+		strings.ToLower(strings.TrimSpace(input.Host)),
+		strings.TrimSpace(input.Descricao),
+		normalizeGardenType(input.Tipo),
+		s.clock().UTC(),
+	)
+	entry, err := scanAdminWalledGardenEntry(row)
+	if err != nil {
+		return store.AdminWalledGardenEntry{}, fmt.Errorf("adicionar walled garden: %w", err)
+	}
+	return entry, nil
+}
+
+func (s *Store) DeleteWalledGarden(ctx context.Context, id int) error {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM walled_garden WHERE id = $1 AND sistema = FALSE`, id)
+	if err != nil {
+		return err
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		return store.ErrRouterNotFound
+	}
+	return nil
+}
+
 func (s *Store) CreateAdminSession(ctx context.Context, input store.CreateAdminSessionInput) error {
 	now := s.clock().UTC()
 	_, err := s.db.ExecContext(ctx, `
@@ -1105,6 +1377,57 @@ func scanAdminPagamento(row scanner) (store.AdminPagamento, error) {
 	return pagamento, nil
 }
 
+func scanAdminRoteador(row scanner) (store.AdminRoteador, error) {
+	var (
+		router      store.AdminRoteador
+		lastPing    sql.NullInt64
+		lastCheckAt sql.NullTime
+	)
+	if err := row.Scan(
+		&router.ID,
+		&router.Nome,
+		&router.IP,
+		&router.PortaSSH,
+		&router.UsuarioSSH,
+		&router.ChaveSSHPath,
+		&router.Status,
+		&lastPing,
+		&lastCheckAt,
+		&router.VersaoOpenWrt,
+		&router.VersaoOpenNDS,
+		&router.Ativo,
+		&router.CreatedAt,
+		&router.UpdatedAt,
+		&router.UsuariosAtivos,
+	); err != nil {
+		return store.AdminRoteador{}, err
+	}
+	if lastPing.Valid {
+		value := int(lastPing.Int64)
+		router.UltimoPingMS = &value
+	}
+	if lastCheckAt.Valid {
+		router.UltimoCheckAt = &lastCheckAt.Time
+	}
+	return router, nil
+}
+
+func scanAdminBlacklistEntry(row scanner) (store.AdminBlacklistEntry, error) {
+	var entry store.AdminBlacklistEntry
+	if err := row.Scan(&entry.ID, &entry.MAC, &entry.Motivo, &entry.CriadoPor, &entry.CreatedAt); err != nil {
+		return store.AdminBlacklistEntry{}, err
+	}
+	return entry, nil
+}
+
+func scanAdminWalledGardenEntry(row scanner) (store.AdminWalledGardenEntry, error) {
+	var entry store.AdminWalledGardenEntry
+	if err := row.Scan(&entry.ID, &entry.Host, &entry.Descricao, &entry.Tipo, &entry.Sistema, &entry.CreatedAt); err != nil {
+		return store.AdminWalledGardenEntry{}, err
+	}
+	return entry, nil
+}
+
 func scanAdminLog(row scanner) (store.AdminLog, error) {
 	var (
 		log            store.AdminLog
@@ -1179,6 +1502,52 @@ func normalizeMAC(mac string) string {
 		return "00:00:00:00:00:00"
 	}
 	return strings.ToUpper(mac)
+}
+
+func usuarioSessionFromUser(usuario store.Usuario) *store.UsuarioSessao {
+	if usuario.Status == "" {
+		return nil
+	}
+	return &store.UsuarioSessao{
+		InicioAcesso:          usuario.InicioAcesso,
+		FimAcesso:             usuario.FimAcesso,
+		Plano:                 usuario.Plano,
+		Status:                usuario.Status,
+		TempoRestanteSegundos: usuario.TempoRestanteSegundos,
+		DadosConsumidosMB:     usuario.DadosConsumidosMB,
+		Origem:                "local",
+	}
+}
+
+func defaultSSHPort(port int) int {
+	if port <= 0 {
+		return 22
+	}
+	return port
+}
+
+func defaultSSHUser(user string) string {
+	user = strings.TrimSpace(user)
+	if user == "" {
+		return "root"
+	}
+	return user
+}
+
+func routerInitialStatus(active bool) string {
+	if !active {
+		return "offline"
+	}
+	return "unknown"
+}
+
+func normalizeGardenType(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "ip", "subnet":
+		return strings.ToLower(strings.TrimSpace(kind))
+	default:
+		return "dominio"
+	}
 }
 
 func normalizeVoucherCode(code string) string {

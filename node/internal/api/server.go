@@ -28,6 +28,7 @@ func NewServer(deps Dependencies) *fiber.App {
 		AppName:     "Astrolink Node",
 		ReadTimeout: 10 * time.Second,
 	})
+	app.Use(securityHeadersMiddleware)
 
 	app.Get("/api/saude", func(c *fiber.Ctx) error {
 		health := deps.Store.Health(c.UserContext())
@@ -59,4 +60,14 @@ func NewServer(deps Dependencies) *fiber.App {
 		Gateway: deps.Gateway,
 	})
 	return app
+}
+
+func securityHeadersMiddleware(c *fiber.Ctx) error {
+	c.Set("X-Content-Type-Options", "nosniff")
+	c.Set("X-Frame-Options", "DENY")
+	c.Set("X-XSS-Protection", "1; mode=block")
+	c.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+	c.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+	c.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'")
+	return c.Next()
 }

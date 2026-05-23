@@ -13,6 +13,8 @@ var (
 	ErrPlanoNotFound   = errors.New("plano nao encontrado")
 	ErrVoucherNotFound = errors.New("voucher nao encontrado")
 	ErrInvalidQuantity = errors.New("quantidade invalida")
+	ErrUsuarioNotFound = errors.New("usuario nao encontrado")
+	ErrRouterNotFound  = errors.New("roteador nao encontrado")
 )
 
 type Store interface {
@@ -55,6 +57,25 @@ type AdminPlanosStore interface {
 	CreateAdminPlano(context.Context, AdminPlanoInput) (planos.Plano, error)
 	UpdateAdminPlano(context.Context, int, AdminPlanoInput) (planos.Plano, error)
 	SetAdminPlanoStatus(context.Context, int, bool) (planos.Plano, error)
+}
+
+type AdminUsuarioStore interface {
+	UsuarioByMAC(context.Context, string) (UsuarioDetalhe, bool, error)
+	ExtendUsuario(context.Context, ExtendUsuarioInput) (Usuario, error)
+	BanUsuario(context.Context, BanUsuarioInput) (Usuario, error)
+}
+
+type AdminNetworkStore interface {
+	AdminRoteadores(context.Context) ([]AdminRoteador, error)
+	CreateRoteador(context.Context, AdminRoteadorInput) (AdminRoteador, error)
+	UpdateRoteador(context.Context, int, AdminRoteadorInput) (AdminRoteador, error)
+	DeleteRoteador(context.Context, int) error
+	AdminBlacklist(context.Context) ([]AdminBlacklistEntry, error)
+	AddBlacklist(context.Context, AdminBlacklistInput) (AdminBlacklistEntry, error)
+	DeleteBlacklist(context.Context, string) error
+	AdminWalledGarden(context.Context) ([]AdminWalledGardenEntry, error)
+	AddWalledGarden(context.Context, AdminWalledGardenInput) (AdminWalledGardenEntry, error)
+	DeleteWalledGarden(context.Context, int) error
 }
 
 type AdminLogStore interface {
@@ -105,6 +126,36 @@ type Usuario struct {
 	Roteador              *RoteadorResumo `json:"roteador,omitempty"`
 }
 
+type UsuarioSessao struct {
+	InicioAcesso          *time.Time   `json:"inicio_acesso,omitempty"`
+	FimAcesso             *time.Time   `json:"fim_acesso,omitempty"`
+	Plano                 *PlanoResumo `json:"plano,omitempty"`
+	Status                string       `json:"status"`
+	TempoRestanteSegundos int64        `json:"tempo_restante_segundos"`
+	DadosConsumidosMB     int          `json:"dados_consumidos_mb"`
+	Valor                 string       `json:"valor,omitempty"`
+	Origem                string       `json:"origem"`
+}
+
+type UsuarioDetalhe struct {
+	Usuario          Usuario         `json:"usuario"`
+	SessaoAtual      *UsuarioSessao  `json:"sessao_atual,omitempty"`
+	HistoricoSessoes []UsuarioSessao `json:"historico_sessoes"`
+	TotalSessoes     int             `json:"total_sessoes"`
+	TotalGasto       string          `json:"total_gasto"`
+	UltimaVisita     *time.Time      `json:"ultima_visita,omitempty"`
+}
+
+type ExtendUsuarioInput struct {
+	MAC     string `json:"-"`
+	Minutos int    `json:"minutos"`
+}
+
+type BanUsuarioInput struct {
+	MAC    string `json:"-"`
+	Motivo string `json:"motivo"`
+}
+
 type PlanoResumo struct {
 	ID   int    `json:"id"`
 	Nome string `json:"nome"`
@@ -113,6 +164,61 @@ type PlanoResumo struct {
 type RoteadorResumo struct {
 	ID   int    `json:"id"`
 	Nome string `json:"nome"`
+}
+
+type AdminRoteador struct {
+	ID             int        `json:"id"`
+	Nome           string     `json:"nome"`
+	IP             string     `json:"ip"`
+	PortaSSH       int        `json:"porta_ssh"`
+	UsuarioSSH     string     `json:"usuario_ssh"`
+	ChaveSSHPath   string     `json:"chave_ssh_path,omitempty"`
+	Status         string     `json:"status"`
+	UltimoPingMS   *int       `json:"ultimo_ping_ms,omitempty"`
+	UltimoCheckAt  *time.Time `json:"ultimo_check_at,omitempty"`
+	VersaoOpenWrt  string     `json:"versao_openwrt,omitempty"`
+	VersaoOpenNDS  string     `json:"versao_opennds,omitempty"`
+	Ativo          bool       `json:"ativo"`
+	UsuariosAtivos int        `json:"usuarios_ativos"`
+	CreatedAt      time.Time  `json:"created_at,omitempty"`
+	UpdatedAt      time.Time  `json:"updated_at,omitempty"`
+}
+
+type AdminRoteadorInput struct {
+	Nome         string `json:"nome"`
+	IP           string `json:"ip"`
+	PortaSSH     int    `json:"porta_ssh"`
+	UsuarioSSH   string `json:"usuario_ssh"`
+	ChaveSSHPath string `json:"chave_ssh_path"`
+	Ativo        bool   `json:"ativo"`
+}
+
+type AdminBlacklistEntry struct {
+	ID        int       `json:"id"`
+	MAC       string    `json:"mac"`
+	Motivo    string    `json:"motivo,omitempty"`
+	CriadoPor string    `json:"criado_por"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+}
+
+type AdminBlacklistInput struct {
+	MAC    string `json:"mac"`
+	Motivo string `json:"motivo"`
+}
+
+type AdminWalledGardenEntry struct {
+	ID        int       `json:"id"`
+	Host      string    `json:"host"`
+	Descricao string    `json:"descricao,omitempty"`
+	Tipo      string    `json:"tipo"`
+	Sistema   bool      `json:"sistema"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+}
+
+type AdminWalledGardenInput struct {
+	Host      string `json:"host"`
+	Descricao string `json:"descricao"`
+	Tipo      string `json:"tipo"`
 }
 
 type CreatePixInput struct {
