@@ -13,102 +13,122 @@
   $: routerTotal = health?.checks.roteadores.total ?? 0
 </script>
 
-<div class="metric-grid">
-  <article class="metric-card tone-teal">
-    <span class="metric-accent" aria-hidden="true"></span>
-    <span class="metric-label">Usuarios ativos</span>
+<section class="metric-grid" aria-label="Resumo operacional">
+  <article class="metric-cell tone-teal">
+    <span class="metric-state" aria-hidden="true"></span>
+    <div class="metric-copy">
+      <span class="metric-label">Usuários ativos</span>
+      <small>{usuarios.length} conhecidos</small>
+    </div>
     <strong>{activeUsers}</strong>
-    <small class="metric-footnote">{usuarios.length} conhecidos</small>
   </article>
-  <article class="metric-card tone-blue">
-    <span class="metric-accent" aria-hidden="true"></span>
-    <span class="metric-label">Planos ativos</span>
+
+  <article class="metric-cell tone-blue">
+    <span class="metric-state" aria-hidden="true"></span>
+    <div class="metric-copy">
+      <span class="metric-label">Planos ativos</span>
+      <small>{planos.length} cadastrados</small>
+    </div>
     <strong>{visiblePlans}</strong>
-    <small class="metric-footnote">{planos.length} cadastrados</small>
   </article>
-  <article class="metric-card tone-green">
-    <span class="metric-accent" aria-hidden="true"></span>
-    <span class="metric-label">Vouchers ativos</span>
+
+  <article class="metric-cell tone-green">
+    <span class="metric-state" aria-hidden="true"></span>
+    <div class="metric-copy">
+      <span class="metric-label">Vouchers ativos</span>
+      <small>{vouchers.length} emitidos</small>
+    </div>
     <strong>{activeVouchers}</strong>
-    <small class="metric-footnote">{vouchers.length} emitidos</small>
   </article>
-  <article class="metric-card tone-slate">
-    <span class="metric-accent" aria-hidden="true"></span>
-    <span class="metric-label">Banco</span>
+
+  <article class="metric-cell tone-slate">
+    <span class="metric-state" aria-hidden="true"></span>
+    <div class="metric-copy">
+      <span class="metric-label">Banco</span>
+      <small>{routerOnline}/{routerTotal} roteador online</small>
+    </div>
     <strong>{health?.checks.banco_dados.status ?? 'sem dados'}</strong>
-    <small class="metric-footnote">{routerOnline}/{routerTotal} roteador online</small>
   </article>
-</div>
+</section>
 
 <style>
   .metric-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-    width: 100%;
-  }
-
-  .metric-card {
-    position: relative;
-    min-height: 132px;
-    display: grid;
-    gap: 8px;
-    align-content: end;
+    gap: 1px;
     overflow: hidden;
-    border: 1px solid #dbe4ef;
-    border-radius: 8px;
-    padding: 18px;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.96));
-    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+    border: 1px solid var(--color-line);
+    border-radius: var(--admin-panel-radius);
+    background: var(--color-line);
+    box-shadow: var(--shadow-panel);
   }
 
-  .metric-accent {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 4px;
-    background: #14b8a6;
+  .metric-cell {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 88px;
+    padding: 16px;
+    background: var(--color-surface-raised);
   }
 
-  .tone-blue .metric-accent {
-    background: #38bdf8;
+  .metric-state {
+    width: 4px;
+    height: 44px;
+    border-radius: 999px;
+    background: var(--color-primary);
   }
 
-  .tone-green .metric-accent {
-    background: #22c55e;
+  .tone-blue .metric-state {
+    background: var(--color-secondary);
   }
 
-  .tone-slate .metric-accent {
-    background: #64748b;
+  .tone-green .metric-state {
+    background: var(--color-success);
+  }
+
+  .tone-slate .metric-state {
+    background: var(--color-muted);
+  }
+
+  .metric-copy {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
   }
 
   .metric-label,
-  .metric-footnote {
-    color: #64748b;
+  .metric-copy small {
+    overflow-wrap: anywhere;
   }
 
   .metric-label {
-    font-size: 0.78rem;
-    font-weight: 850;
-    text-transform: uppercase;
+    color: var(--color-ink);
+    font-size: 0.82rem;
+    font-weight: 900;
+    line-height: 1.2;
   }
 
-  .metric-card strong {
-    min-width: 0;
-    overflow-wrap: anywhere;
-    font-size: 1.82rem;
-    font-weight: 930;
-    line-height: 1;
-  }
-
-  .metric-footnote {
-    font-size: 0.78rem;
+  .metric-copy small {
+    color: var(--color-muted);
+    font-size: 0.74rem;
     font-weight: 750;
+    line-height: 1.25;
   }
 
-  @media (max-width: 900px) {
+  .metric-cell strong {
+    min-width: 0;
+    color: var(--color-ink);
+    font-size: clamp(1.3rem, 2vw, 1.65rem);
+    font-weight: 950;
+    line-height: 1;
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+
+  @media (max-width: 980px) {
     .metric-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -117,6 +137,11 @@
   @media (max-width: 620px) {
     .metric-grid {
       grid-template-columns: 1fr;
+    }
+
+    .metric-cell {
+      min-height: 74px;
+      padding: 14px;
     }
   }
 </style>

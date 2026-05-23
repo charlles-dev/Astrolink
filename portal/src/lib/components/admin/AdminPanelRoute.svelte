@@ -92,7 +92,7 @@
       if (error instanceof APIError && error.status === 428 && error.code === 'totp_obrigatorio') {
         showTotp = true
       }
-      loginError = messageFromError(error, 'Nao foi possivel entrar no painel')
+      loginError = messageFromError(error, 'Não foi possível entrar no console')
     } finally {
       loginLoading = false
     }
@@ -121,7 +121,7 @@
       await Promise.allSettled([loadOperations(), loadSetupStatus()])
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      actionMessage = messageFromError(error, 'Nao foi possivel carregar o painel')
+      actionMessage = messageFromError(error, 'Não foi possível carregar o console')
     } finally {
       loading = false
     }
@@ -134,7 +134,7 @@
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) throw error
       setupStatus = null
-      setupMessage = messageFromError(error, 'Setup local indisponivel')
+      setupMessage = messageFromError(error, 'Setup local indisponível')
     }
   }
 
@@ -150,7 +150,7 @@
     } else if (!expireSessionIfUnauthorized(paymentsResult.reason)) {
       pagamentos = []
       pagamentosTotais = emptyPaymentTotals()
-      actionMessage = messageFromError(paymentsResult.reason, 'Pagamentos indisponiveis no momento')
+      actionMessage = messageFromError(paymentsResult.reason, 'Pagamentos indisponíveis no momento')
     }
 
     if (logsResult.status === 'fulfilled') {
@@ -159,7 +159,7 @@
     } else if (!expireSessionIfUnauthorized(logsResult.reason)) {
       logs = []
       logsTotal = 0
-      actionMessage = messageFromError(logsResult.reason, 'Logs indisponiveis no momento')
+      actionMessage = messageFromError(logsResult.reason, 'Logs indisponíveis no momento')
     }
   }
 
@@ -173,7 +173,7 @@
       actionMessage = `${mac} desconectado do roteador`
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      actionMessage = messageFromError(error, 'Nao foi possivel desconectar o usuario')
+      actionMessage = messageFromError(error, 'Não foi possível desconectar o usuário')
     } finally {
       loading = false
     }
@@ -192,7 +192,7 @@
           : `${result.quantidade} vouchers gerados`
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      actionMessage = messageFromError(error, 'Nao foi possivel gerar vouchers')
+      actionMessage = messageFromError(error, 'Não foi possível gerar vouchers')
     } finally {
       loading = false
     }
@@ -207,7 +207,7 @@
       await reloadVouchers()
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      actionMessage = messageFromError(error, 'Nao foi possivel carregar vouchers')
+      actionMessage = messageFromError(error, 'Não foi possível carregar vouchers')
     } finally {
       loading = false
     }
@@ -223,7 +223,7 @@
       actionMessage = 'Voucher desativado'
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      actionMessage = messageFromError(error, 'Nao foi possivel desativar o voucher')
+      actionMessage = messageFromError(error, 'Não foi possível desativar o voucher')
     } finally {
       loading = false
     }
@@ -237,10 +237,10 @@
     try {
       const csv = await api.exportAdminVouchers(token, filters)
       downloadBlob(csv, 'astrolink-vouchers.csv')
-      actionMessage = 'Exportacao iniciada'
+      actionMessage = 'Exportação iniciada'
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      actionMessage = messageFromError(error, 'Nao foi possivel exportar vouchers')
+      actionMessage = messageFromError(error, 'Não foi possível exportar vouchers')
     } finally {
       loading = false
     }
@@ -255,7 +255,7 @@
       await reloadPayments()
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      actionMessage = messageFromError(error, 'Nao foi possivel carregar pagamentos')
+      actionMessage = messageFromError(error, 'Não foi possível carregar pagamentos')
     } finally {
       loading = false
     }
@@ -269,10 +269,10 @@
     try {
       const csv = await api.exportAdminPagamentos(token, filters)
       downloadBlob(csv, 'astrolink-pagamentos.csv')
-      actionMessage = 'Exportacao iniciada'
+      actionMessage = 'Exportação iniciada'
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      actionMessage = messageFromError(error, 'Nao foi possivel exportar pagamentos')
+      actionMessage = messageFromError(error, 'Não foi possível exportar pagamentos')
     } finally {
       loading = false
     }
@@ -287,7 +287,7 @@
       await reloadLogs()
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      actionMessage = messageFromError(error, 'Nao foi possivel carregar logs')
+      actionMessage = messageFromError(error, 'Não foi possível carregar logs')
     } finally {
       loading = false
     }
@@ -301,10 +301,10 @@
     try {
       const csv = await api.exportAdminLogs(token, filters)
       downloadBlob(csv, 'astrolink-logs.csv')
-      actionMessage = 'Exportacao iniciada'
+      actionMessage = 'Exportação iniciada'
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      actionMessage = messageFromError(error, 'Nao foi possivel exportar logs')
+      actionMessage = messageFromError(error, 'Não foi possível exportar logs')
     } finally {
       loading = false
     }
@@ -322,7 +322,7 @@
       if (expireSessionIfUnauthorized(error)) return
       backupMessage = messageFromError(
         error,
-        'Backup indisponivel neste ambiente. Tente novamente quando o servico estiver ativo.'
+        'Backup indisponível neste ambiente. Tente novamente quando o serviço estiver ativo.'
       )
     } finally {
       loading = false
@@ -341,7 +341,7 @@
       if (expireSessionIfUnauthorized(error)) return
       backupMessage = messageFromError(
         error,
-        'Restore indisponivel neste ambiente. Nenhuma restauracao foi executada.'
+        'Restore indisponível neste ambiente. Nenhuma restauração foi executada.'
       )
     } finally {
       loading = false
@@ -356,11 +356,11 @@
     try {
       setupStatus = await api.updateSetupEnv(values, token)
       setupMessage = setupStatus.requires_restart
-        ? 'Setup local salvo. Reinicie o servico para aplicar.'
+        ? 'Setup local salvo. Reinicie o serviço para aplicar.'
         : 'Setup local salvo'
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      setupMessage = messageFromError(error, 'Nao foi possivel salvar o setup local')
+      setupMessage = messageFromError(error, 'Não foi possível salvar o setup local')
       throw error
     } finally {
       loading = false
@@ -400,7 +400,7 @@
       planos = result.planos
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      actionMessage = messageFromError(error, 'Nao foi possivel salvar o plano')
+      actionMessage = messageFromError(error, 'Não foi possível salvar o plano')
       throw error
     } finally {
       loading = false
@@ -418,7 +418,7 @@
       actionMessage = ativo ? 'Plano ativado' : 'Plano inativado'
     } catch (error) {
       if (expireSessionIfUnauthorized(error)) return
-      actionMessage = messageFromError(error, 'Nao foi possivel alterar o status do plano')
+      actionMessage = messageFromError(error, 'Não foi possível alterar o status do plano')
       throw error
     } finally {
       loading = false
@@ -481,7 +481,7 @@
         signal: controller.signal
       })
       if (response.status === 401) {
-        expireSessionIfUnauthorized(new APIError(401, 'nao_autorizado', 'Sessao expirada. Entre novamente.'))
+        expireSessionIfUnauthorized(new APIError(401, 'nao_autorizado', 'Sessão expirada. Entre novamente.'))
         return
       }
       if (!response.ok || !response.body) {
@@ -600,7 +600,7 @@
   function expireSessionIfUnauthorized(error: unknown) {
     if (!(error instanceof APIError) || error.status !== 401) return false
     resetSession()
-    loginError = 'Sessao expirada. Entre novamente.'
+    loginError = 'Sessão expirada. Entre novamente.'
     actionMessage = ''
     return true
   }
@@ -650,26 +650,27 @@
     onLogout={logout}
   />
 {:else}
-  <main class="login-screen">
-    <section class="login-panel">
+  <main class="login-screen" data-theme="astrolink">
+    <section class="login-panel card">
       <div class="brand-mark">A</div>
-      <h1>Painel local</h1>
-      <p>Entre para acompanhar saude do no, planos e usuarios conectados.</p>
+      <h1>Console operacional local</h1>
+      <p>Acesse o node para acompanhar saúde, sessões, planos e rotinas protegidas.</p>
 
       <form onsubmit={(event) => { event.preventDefault(); void login() }}>
         <label>
-          Usuario
-          <input bind:value={usuario} autocomplete="username" />
+          Usuário
+          <input class="input input-bordered" bind:value={usuario} autocomplete="username" />
         </label>
         <label>
           Senha
-          <input bind:value={senha} type="password" autocomplete="current-password" />
+          <input class="input input-bordered" bind:value={senha} type="password" autocomplete="current-password" />
         </label>
         {#if showTotp}
           <label>
-            Codigo 2FA
+            Código 2FA
             <input
               bind:value={totpCodigo}
+              class="input input-bordered"
               inputmode="numeric"
               autocomplete="one-time-code"
               maxlength="8"
@@ -679,7 +680,7 @@
         {#if loginError}
           <p class="login-error" role="alert">{loginError}</p>
         {/if}
-        <button type="submit" disabled={loginLoading}>
+        <button type="submit" class="btn btn-primary" disabled={loginLoading}>
           {loginLoading ? 'Entrando...' : 'Entrar'}
         </button>
       </form>
@@ -693,18 +694,16 @@
     display: grid;
     place-items: center;
     padding: 24px;
-    background:
-      radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 32%),
-      #f8fafc;
+    background: var(--color-paper);
   }
 
   .login-panel {
     width: min(100%, 420px);
     border: 1px solid var(--color-line);
     border-radius: 8px;
-    padding: 28px;
-    background: white;
-    box-shadow: 0 22px 52px rgba(15, 23, 42, 0.14);
+    padding: 32px;
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-soft);
   }
 
   .brand-mark {
@@ -713,8 +712,8 @@
     display: grid;
     place-items: center;
     border-radius: 8px;
-    background: var(--color-ink);
-    color: white;
+    background: var(--color-primary);
+    color: var(--color-surface);
     font-weight: 950;
   }
 
@@ -739,8 +738,8 @@
 
   form {
     display: grid;
-    gap: 14px;
-    margin-top: 24px;
+    gap: 16px;
+    margin-top: 28px;
   }
 
   label {
@@ -753,19 +752,13 @@
 
   input {
     min-height: 48px;
-    border: 1px solid var(--color-line);
     border-radius: 8px;
     padding: 0 13px;
-    background: #f8fafc;
-    color: var(--color-ink);
   }
 
   button {
     min-height: 50px;
-    border: 0;
     border-radius: 8px;
-    background: var(--color-ink);
-    color: white;
     font-weight: 900;
   }
 
@@ -777,8 +770,8 @@
   .login-error {
     border-radius: 8px;
     padding: 12px;
-    background: #fee2e2;
-    color: #991b1b;
+    background: var(--state-error-bg);
+    color: var(--state-error-text);
     font-size: 0.88rem;
     font-weight: 800;
   }

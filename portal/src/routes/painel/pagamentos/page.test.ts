@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Page from './+page.svelte'
@@ -74,5 +74,55 @@ describe('/painel/pagamentos', () => {
     await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
 
     expect(await screen.findByRole('heading', { name: 'Pagamentos' })).toBeInTheDocument()
+  })
+
+  it('formats totals, explains truncated payments and clears filters', async () => {
+    mockApi.getAdminPagamentos.mockResolvedValue({
+      total: 11,
+      totais: { pendente: 1, aprovado: 10, cancelado: 0, expirado: 0, valor_total: '1234.56' },
+      pagamentos: Array.from({ length: 11 }, (_, index) => ({
+        txid: `pix-${index + 1}`,
+        status: 'aprovado',
+        valor: '15.5',
+        descricao: 'Acesso 24 Horas',
+        mac: `AA:BB:CC:DD:EE:${String(index).padStart(2, '0')}`,
+        plano_id: 1,
+        plano: { id: 1, nome: 'Acesso 24 Horas' },
+        created_at: '2026-05-21T10:00:00Z',
+        expira_em: '2026-05-21T10:30:00Z'
+      }))
+    })
+
+    render(Page)
+
+    await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
+
+    expect(await screen.findByText('R$ 1.234,56')).toBeInTheDocument()
+    expect(screen.getAllByText('R$ 15,50')).toHaveLength(10)
+    expect(screen.getByText('Mostrando 10 de 11 pagamentos (limite de 10).')).toBeInTheDocument()
+
+    await fireEvent.change(screen.getByLabelText('Status do pagamento'), {
+      target: { value: 'aprovado' }
+    })
+    await fireEvent.input(screen.getByLabelText('Início'), { target: { value: '2026-05-01' } })
+    await fireEvent.input(screen.getByLabelText('Fim'), { target: { value: '2026-05-21' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros de pagamentos' }))
+
+    await waitFor(() => {
+      expect(mockApi.getAdminPagamentos).toHaveBeenLastCalledWith('token-123', {
+        status: 'aprovado',
+        inicio: '2026-05-01',
+        fim: '2026-05-21'
+      })
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros de pagamentos' }))
+
+    await waitFor(() => {
+      expect(mockApi.getAdminPagamentos).toHaveBeenLastCalledWith('token-123', {})
+    })
+    expect(screen.getByLabelText('Status do pagamento')).toHaveValue('')
+    expect(screen.getByLabelText('Início')).toHaveValue('')
+    expect(screen.getByLabelText('Fim')).toHaveValue('')
   })
 })

@@ -1,9 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import AdminDashboard from './AdminDashboard.svelte'
 
 describe('AdminDashboard', () => {
+  afterEach(() => {
+    localStorage.removeItem('astrolink.admin.theme')
+    delete document.documentElement.dataset.adminTheme
+    document.documentElement.style.colorScheme = ''
+  })
+
   it('renders health, plans and connected users', () => {
     render(AdminDashboard, {
       props: {
@@ -66,11 +72,18 @@ describe('AdminDashboard', () => {
       }
     })
 
-    expect(screen.getByRole('heading', { name: 'Painel local' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Operação local' })).toBeInTheDocument()
     expect(screen.getByText('Banco')).toBeInTheDocument()
     expect(screen.getByText('memory')).toBeInTheDocument()
-    expect(screen.getByText('Usuarios ativos')).toBeInTheDocument()
+    expect(screen.getByText('Usuários ativos')).toBeInTheDocument()
     expect(screen.getByText('AA:BB:CC:DD:EE:FF')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Ver usuários' })).toHaveAttribute(
+      'href',
+      '/painel/usuarios'
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Desconectar AA:BB:CC:DD:EE:FF' })
+    ).not.toBeInTheDocument()
   })
 
   it('marks the active page in shell navigation', () => {
@@ -91,14 +104,39 @@ describe('AdminDashboard', () => {
     })
 
     const voucherLinks = screen.getAllByRole('link', { name: 'Vouchers' })
-    expect(voucherLinks).toHaveLength(2)
-    voucherLinks.forEach((link) => {
-      expect(link).toHaveAttribute('aria-current', 'page')
-    })
+    expect(voucherLinks).toHaveLength(1)
+    expect(voucherLinks[0]).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('heading', { name: 'Emissão de vouchers' })).toBeInTheDocument()
 
-    screen.getAllByRole('link', { name: 'Usuarios' }).forEach((link) => {
+    screen.getAllByRole('link', { name: 'Usuários' }).forEach((link) => {
       expect(link).not.toHaveAttribute('aria-current')
     })
+  })
+
+  it('renders the admin shell with the Astrolink DaisyUI theme and controls', async () => {
+    render(AdminDashboard, {
+      props: {
+        activePage: 'overview',
+        health: null,
+        planos: [],
+        vouchers: [],
+        usuarios: [],
+        loading: false,
+        actionMessage: '',
+        onRefresh: vi.fn(),
+        onDisconnect: vi.fn(),
+        onGenerateVouchers: vi.fn(),
+        onLogout: vi.fn()
+      }
+    })
+
+    expect(screen.getByTestId('admin-shell')).toHaveAttribute('data-theme', 'astrolink')
+    await fireEvent.click(screen.getByRole('button', { name: 'Ativar modo escuro' }))
+    expect(screen.getByTestId('admin-shell')).toHaveAttribute('data-theme', 'astrolink-dark')
+    expect(localStorage.getItem('astrolink.admin.theme')).toBe('dark')
+    expect(document.documentElement.dataset.adminTheme).toBe('dark')
+    expect(screen.getByRole('button', { name: 'Atualizar' })).toHaveClass('btn')
+    expect(screen.getByRole('button', { name: 'Sair' })).toHaveClass('btn-primary')
   })
 
   it('requests user disconnect from the row action', async () => {
@@ -218,7 +256,7 @@ describe('AdminDashboard', () => {
     await fireEvent.click(screen.getByLabelText('Universal'))
     await fireEvent.input(screen.getByLabelText('Prefixo'), { target: { value: 'pub' } })
     await fireEvent.input(screen.getByLabelText('Quantidade'), { target: { value: '4' } })
-    await fireEvent.input(screen.getByLabelText('Usos maximos'), { target: { value: '25' } })
+    await fireEvent.input(screen.getByLabelText('Usos máximos'), { target: { value: '25' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Gerar vouchers' }))
 
     expect(onGenerateVouchers).toHaveBeenCalledWith({
@@ -267,7 +305,7 @@ describe('AdminDashboard', () => {
 
     await fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'inativo' } })
     await fireEvent.change(screen.getByLabelText('Plano do filtro'), { target: { value: '2' } })
-    await fireEvent.input(screen.getByLabelText('Codigo'), { target: { value: 'vipa' } })
+    await fireEvent.input(screen.getByLabelText('Código'), { target: { value: 'vipa' } })
     await fireEvent.input(screen.getByLabelText('Lote'), { target: { value: '12' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
 
@@ -311,7 +349,7 @@ describe('AdminDashboard', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Desativar VIPA-7777' }))
     expect(onDeactivateVoucher).not.toHaveBeenCalled()
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Confirmar desativacao VIPA-7777' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Confirmar desativação de VIPA-7777' }))
 
     expect(onDeactivateVoucher).toHaveBeenCalledWith(7)
   })
@@ -337,7 +375,7 @@ describe('AdminDashboard', () => {
     })
 
     await fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'ativo' } })
-    await fireEvent.input(screen.getByLabelText('Codigo'), { target: { value: 'vip' } })
+    await fireEvent.input(screen.getByLabelText('Código'), { target: { value: 'vip' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Exportar CSV' }))
 
     expect(onExportVouchers).toHaveBeenCalledWith({
@@ -390,12 +428,12 @@ describe('AdminDashboard', () => {
 
     expect(screen.getByRole('heading', { name: 'Pagamentos' })).toBeInTheDocument()
     expect(screen.getByText('pix-123')).toBeInTheDocument()
-    expect(screen.getByText('R$ 30.00')).toBeInTheDocument()
+    expect(screen.getByText('R$ 30,00')).toBeInTheDocument()
 
     await fireEvent.change(screen.getByLabelText('Status do pagamento'), {
       target: { value: 'aprovado' }
     })
-    await fireEvent.input(screen.getByLabelText('Inicio'), { target: { value: '2026-05-01' } })
+    await fireEvent.input(screen.getByLabelText('Início'), { target: { value: '2026-05-01' } })
     await fireEvent.input(screen.getByLabelText('Fim'), { target: { value: '2026-05-21' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Exportar pagamentos CSV' }))
 
@@ -424,10 +462,10 @@ describe('AdminDashboard', () => {
             timestamp: '2026-05-21T10:00:00Z',
             nivel: 'erro',
             tipo: 'backup',
-            mensagem: 'Backup indisponivel no modo memory'
+            mensagem: 'Backup indisponível no modo memory'
           }
         ],
-        backupMessage: 'Backup indisponivel neste ambiente',
+        backupMessage: 'Backup indisponível neste ambiente',
         loading: false,
         actionMessage: '',
         onRefresh: vi.fn(),
@@ -442,19 +480,19 @@ describe('AdminDashboard', () => {
     })
 
     expect(screen.getByRole('heading', { name: 'Logs' })).toBeInTheDocument()
-    expect(screen.getByText('Backup indisponivel no modo memory')).toBeInTheDocument()
-    expect(screen.getByText('Backup indisponivel neste ambiente')).toBeInTheDocument()
+    expect(screen.getByText('Backup indisponível no modo memory')).toBeInTheDocument()
+    expect(screen.getByText('Backup indisponível neste ambiente')).toBeInTheDocument()
 
-    await fireEvent.change(screen.getByLabelText('Nivel'), { target: { value: 'erro' } })
+    await fireEvent.change(screen.getByLabelText('Nível'), { target: { value: 'erro' } })
     await fireEvent.input(screen.getByLabelText('Tipo'), { target: { value: 'backup' } })
-    await fireEvent.input(screen.getByLabelText('Texto'), { target: { value: 'memory' } })
+    await fireEvent.input(screen.getByLabelText('Buscar texto'), { target: { value: 'memory' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros de logs' }))
     await fireEvent.click(screen.getByRole('button', { name: 'Exportar logs CSV' }))
     await fireEvent.click(screen.getByRole('button', { name: 'Gerar backup' }))
     await fireEvent.input(screen.getByLabelText('Arquivo do backup'), {
       target: { value: 'backup.sql' }
     })
-    await fireEvent.input(screen.getByLabelText('Confirmacao RESTAURAR'), {
+    await fireEvent.input(screen.getByLabelText('Confirmação RESTAURAR'), {
       target: { value: 'RESTAURAR' }
     })
     await fireEvent.click(screen.getByRole('button', { name: 'Validar restore protegido' }))

@@ -34,8 +34,8 @@
     ? 'Recebendo eventos em tempo real.'
     : 'Aguardando reconexao do canal ao vivo.'
   $: lastUpdateText = lastEventAt
-    ? `Ultima atualizacao: ${formatDate(lastEventAt)}`
-    : 'Ultima atualizacao: sem dados'
+    ? `Última atualização: ${formatDate(lastEventAt)}`
+    : 'Última atualização: sem dados'
 
   function formatDate(value: string) {
     if (!value) return 'sem data'
@@ -50,47 +50,50 @@
   }
 </script>
 
-<section class="live-events-panel" aria-labelledby="live-events-title">
+<section class="live-events-panel card" aria-labelledby="live-events-title">
   <div class="section-heading">
     <div>
       <h2 id="live-events-title">Eventos ao vivo</h2>
       <p>{statusMessage}</p>
     </div>
 
-    <span class="status-pill" class:online={connected} class:offline={!connected}>
+    <span class="status-pill badge" class:online={connected} class:offline={!connected}>
       <span aria-hidden="true"></span>
       {statusText}
     </span>
   </div>
 
-  <p class="last-update">{lastUpdateText}</p>
+  <div class="live-toolbar">
+    <p class="last-update">{lastUpdateText}</p>
+    <a class="btn btn-outline logs-link" href="/painel/logs">Ver logs</a>
+  </div>
 
   {#if snapshot}
-    <div class="snapshot-grid" aria-label="Snapshot operacional">
+    <dl class="snapshot-grid" aria-label="Snapshot operacional">
       <div>
-        <span>Usuarios</span>
-        <strong>{snapshot.usuarios.ativos}/{snapshot.usuarios.total}</strong>
+        <dt>Usuários</dt>
+        <dd>{snapshot.usuarios.ativos}/{snapshot.usuarios.total}</dd>
         <small>ativos/total</small>
       </div>
 
       <div>
-        <span>Vouchers</span>
-        <strong>{snapshot.vouchers.ativos}/{snapshot.vouchers.total}</strong>
+        <dt>Vouchers</dt>
+        <dd>{snapshot.vouchers.ativos}/{snapshot.vouchers.total}</dd>
         <small>ativos/total</small>
       </div>
 
       <div>
-        <span>PIX</span>
-        <strong>{snapshot.pix.pendente} pendente</strong>
+        <dt>PIX</dt>
+        <dd>{snapshot.pix.pendente} pendente</dd>
         <small>{snapshot.pix.aprovado} aprovado</small>
       </div>
 
       <div>
-        <span>Logs</span>
-        <strong>{snapshot.logs}</strong>
+        <dt>Logs</dt>
+        <dd>{snapshot.logs}</dd>
         <small>registros</small>
       </div>
-    </div>
+    </dl>
   {:else}
     <div class="empty-state compact">
       <h3>Sem snapshot recebido.</h3>
@@ -100,7 +103,7 @@
 
   <div class="events-section" aria-live="polite">
     <div class="events-head">
-      <h3>Ultimos eventos</h3>
+      <h3>Últimos eventos</h3>
       <span>{events.length} recentes</span>
     </div>
 
@@ -125,15 +128,18 @@
 
 <style>
   .live-events-panel {
+    container-type: inline-size;
     border: 1px solid var(--color-line);
-    border-radius: 8px;
-    padding: 18px;
-    background: white;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    border-radius: var(--admin-panel-radius);
+    padding: 0;
+    overflow: hidden;
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-panel);
   }
 
   .section-heading,
   .status-pill,
+  .live-toolbar,
   .events-head,
   .event-meta {
     display: flex;
@@ -142,19 +148,23 @@
 
   h2,
   h3,
-  p {
+  p,
+  dl,
+  dd {
     margin: 0;
   }
 
   .section-heading {
     justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 10px;
+    gap: 16px;
+    border-bottom: 1px solid var(--color-line);
+    padding: 15px 16px;
   }
 
   h2 {
-    font-size: 1.05rem;
+    font-size: 1rem;
     font-weight: 900;
+    line-height: 1.2;
   }
 
   .section-heading p,
@@ -168,125 +178,148 @@
   }
 
   .section-heading p {
-    margin-top: 4px;
-    font-size: 0.88rem;
-    line-height: 1.35;
+    margin-top: 3px;
+    font-size: 0.8rem;
+    line-height: 1.3;
   }
 
   .status-pill {
     flex: 0 0 auto;
     gap: 7px;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
+    border: 1px solid var(--color-line);
+    border-radius: 999px;
     padding: 7px 9px;
-    background: #f8fafc;
+    background: var(--color-surface-subtle);
     color: var(--color-muted);
-    font-size: 0.74rem;
+    font-size: 0.72rem;
     font-weight: 900;
     line-height: 1;
     white-space: nowrap;
   }
 
   .status-pill span {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: currentColor;
   }
 
   .status-pill.online {
-    border-color: #bbf7d0;
-    background: #f0fdf4;
-    color: #166534;
+    border-color: var(--state-success-line);
+    background: var(--state-success-bg);
+    color: var(--state-success-text);
   }
 
   .status-pill.offline {
-    border-color: #fecaca;
-    background: #fef2f2;
-    color: #991b1b;
+    border-color: var(--state-error-line);
+    background: var(--state-error-bg);
+    color: var(--state-error-text);
+  }
+
+  .live-toolbar {
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--color-line);
+    padding: 10px 16px;
+    background: var(--color-surface-subtle);
   }
 
   .last-update {
-    border-top: 1px solid var(--color-line);
-    padding-top: 12px;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 800;
     line-height: 1.35;
+  }
+
+  .logs-link {
+    min-height: 30px;
+    border-radius: 6px;
+    padding-inline: 9px;
+    font-size: 0.72rem;
+    font-weight: 900;
+    white-space: nowrap;
   }
 
   .snapshot-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    margin-top: 12px;
-    border-top: 1px solid #e2e8f0;
-    border-left: 1px solid #e2e8f0;
+    border-bottom: 1px solid var(--color-line);
   }
 
   .snapshot-grid div {
     min-width: 0;
     display: grid;
-    gap: 4px;
-    border-right: 1px solid #e2e8f0;
-    border-bottom: 1px solid #e2e8f0;
-    padding: 10px;
-    background: #fcfdff;
+    gap: 3px;
+    border-right: 1px solid var(--color-line);
+    padding: 12px 16px;
+    background: var(--color-row);
   }
 
-  .snapshot-grid span {
+  .snapshot-grid div:last-child {
+    border-right: 0;
+  }
+
+  .snapshot-grid dt {
     color: var(--color-muted);
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     font-weight: 900;
+    line-height: 1.2;
     text-transform: uppercase;
   }
 
-  .snapshot-grid strong {
+  .snapshot-grid dd {
     color: var(--color-ink);
     font-size: 1rem;
     font-weight: 950;
-    line-height: 1.1;
+    line-height: 1.15;
     overflow-wrap: anywhere;
   }
 
   .snapshot-grid small {
-    font-size: 0.75rem;
+    font-size: 0.74rem;
     font-weight: 750;
+    line-height: 1.25;
     overflow-wrap: anywhere;
   }
 
   .events-section {
     display: grid;
-    gap: 10px;
-    margin-top: 14px;
-    border-top: 1px solid var(--color-line);
-    padding-top: 14px;
   }
 
   .events-head {
     justify-content: space-between;
     gap: 10px;
+    border-bottom: 1px solid var(--color-line);
+    padding: 12px 16px;
   }
 
   h3 {
     color: var(--color-ink);
-    font-size: 0.92rem;
+    font-size: 0.9rem;
     font-weight: 900;
+    line-height: 1.25;
   }
 
   .events-head span {
     flex: 0 0 auto;
-    font-size: 0.74rem;
+    font-size: 0.72rem;
     font-weight: 850;
   }
 
   .event-list {
     display: grid;
-    gap: 8px;
   }
 
   .event-list article {
     min-width: 0;
-    border-left: 3px solid #38bdf8;
-    padding: 9px 0 9px 10px;
+    display: grid;
+    gap: 4px;
+    border-bottom: 1px solid var(--color-line);
+    padding: 10px 16px 10px 14px;
+    box-shadow: inset 3px 0 0 var(--color-secondary);
+  }
+
+  .event-list article:last-child {
+    border-bottom: 0;
   }
 
   .event-meta {
@@ -300,6 +333,7 @@
     color: var(--color-ink);
     font-size: 0.8rem;
     font-weight: 900;
+    line-height: 1.25;
     overflow-wrap: anywhere;
   }
 
@@ -307,45 +341,67 @@
     flex: 0 0 auto;
     font-size: 0.72rem;
     font-weight: 800;
+    line-height: 1.25;
     white-space: nowrap;
   }
 
   .event-list p {
-    margin-top: 4px;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     line-height: 1.35;
     overflow-wrap: anywhere;
   }
 
   .empty-state {
-    border: 1px dashed var(--color-line);
-    border-radius: 8px;
-    padding: 14px;
-    background: #f8fafc;
+    padding: 18px 16px;
+    background: var(--color-surface-subtle);
   }
 
   .empty-state.compact {
-    margin-top: 12px;
+    border-bottom: 1px solid var(--color-line);
   }
 
   .empty-state h3 {
-    font-size: 0.9rem;
+    font-size: 0.88rem;
   }
 
   .empty-state p {
     margin-top: 5px;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     line-height: 1.35;
+  }
+
+  @container (max-width: 430px) {
+    .snapshot-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .snapshot-grid div:nth-child(2n) {
+      border-right: 0;
+    }
+
+    .snapshot-grid div:nth-child(-n + 2) {
+      border-bottom: 1px solid var(--color-line);
+    }
   }
 
   @media (max-width: 760px) {
     .snapshot-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .snapshot-grid div:nth-child(2n) {
+      border-right: 0;
+    }
+
+    .snapshot-grid div:nth-child(-n + 2) {
+      border-bottom: 1px solid var(--color-line);
+    }
   }
 
   @media (max-width: 520px) {
     .section-heading,
+    .live-toolbar,
+    .events-head,
     .event-meta {
       align-items: flex-start;
       flex-direction: column;
@@ -357,6 +413,19 @@
 
     .snapshot-grid {
       grid-template-columns: 1fr;
+    }
+
+    .snapshot-grid div,
+    .snapshot-grid div:nth-child(2n) {
+      border-right: 0;
+    }
+
+    .snapshot-grid div:nth-child(n) {
+      border-bottom: 1px solid var(--color-line);
+    }
+
+    .snapshot-grid div:last-child {
+      border-bottom: 0;
     }
   }
 </style>

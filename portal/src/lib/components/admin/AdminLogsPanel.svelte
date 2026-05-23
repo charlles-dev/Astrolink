@@ -11,6 +11,9 @@
   let tipo = ''
   let texto = ''
 
+  $: visibleLogs = logs.slice(0, 12)
+  $: logsTruncated = total > visibleLogs.length || logs.length > visibleLogs.length
+
   function currentFilters(): AdminLogFilters {
     const filters: AdminLogFilters = {}
     if (nivel) filters.nivel = nivel
@@ -21,6 +24,13 @@
 
   function applyFilters() {
     onApplyLogFilters(currentFilters())
+  }
+
+  function clearFilters() {
+    nivel = ''
+    tipo = ''
+    texto = ''
+    onApplyLogFilters({})
   }
 
   function exportCsv() {
@@ -38,13 +48,22 @@
       minute: '2-digit'
     })
   }
+
+  function levelLabel(value: string) {
+    const labels: Record<string, string> = {
+      info: 'Info',
+      aviso: 'Aviso',
+      erro: 'Erro'
+    }
+    return labels[value] ?? value
+  }
 </script>
 
-<section class="logs-panel" aria-labelledby="logs-title">
+<section class="logs-panel card" aria-labelledby="logs-title">
   <div class="section-heading">
     <div>
       <h2 id="logs-title">Logs</h2>
-      <p>{total} registros operacionais.</p>
+      <p>Observabilidade local: {total} registros indexados.</p>
     </div>
   </div>
 
@@ -58,8 +77,8 @@
   >
     <div class="filter-grid">
       <label class="field">
-        Nivel
-        <select bind:value={nivel} disabled={loading}>
+        Nível
+        <select class="select select-bordered" bind:value={nivel} disabled={loading}>
           <option value="">Todos</option>
           <option value="info">Info</option>
           <option value="aviso">Aviso</option>
@@ -68,18 +87,18 @@
       </label>
       <label class="field">
         Tipo
-        <input bind:value={tipo} autocomplete="off" disabled={loading} />
+        <input class="input input-bordered" bind:value={tipo} autocomplete="off" disabled={loading} />
       </label>
       <label class="field wide">
-        Texto
-        <input bind:value={texto} autocomplete="off" disabled={loading} />
+        Buscar texto
+        <input class="input input-bordered" bind:value={texto} autocomplete="off" disabled={loading} />
       </label>
     </div>
 
     <div class="filter-actions">
       <button
         type="submit"
-        class="ink-button"
+        class="btn btn-primary ink-button"
         disabled={loading}
         aria-label="Aplicar filtros de logs"
       >
@@ -87,7 +106,16 @@
       </button>
       <button
         type="button"
-        class="ghost-button"
+        class="btn btn-outline ghost-button"
+        onclick={clearFilters}
+        disabled={loading}
+        aria-label="Limpar filtros de logs"
+      >
+        Limpar filtros
+      </button>
+      <button
+        type="button"
+        class="btn btn-outline ghost-button"
         onclick={exportCsv}
         disabled={loading}
         aria-label="Exportar logs CSV"
@@ -97,25 +125,36 @@
     </div>
   </form>
 
+  <p class="list-count">
+    {#if logsTruncated}
+      Mostrando {visibleLogs.length} de {total || logs.length} logs (limite de 12).
+    {:else}
+      Mostrando {visibleLogs.length} {visibleLogs.length === 1 ? 'log' : 'logs'}.
+    {/if}
+  </p>
+
   <div class="log-list">
-    {#each logs.slice(0, 12) as log (`${log.timestamp}-${log.tipo}-${log.mensagem}`)}
+    {#each visibleLogs as log (`${log.timestamp}-${log.tipo}-${log.mensagem}`)}
       <article>
         <div class="log-main">
           <div class="log-head">
-            <span class={`level ${log.nivel}`}>{log.nivel}</span>
+            <span class={`badge level ${log.nivel}`}>{levelLabel(log.nivel)}</span>
             <strong>{log.tipo}</strong>
             <small>{formatDate(log.timestamp)}</small>
           </div>
           <p>{log.mensagem}</p>
           {#if log.detalhes}
-            <code>{JSON.stringify(log.detalhes)}</code>
+            <div class="details-block">
+              <span>Detalhes</span>
+              <code>{JSON.stringify(log.detalhes)}</code>
+            </div>
           {/if}
         </div>
       </article>
     {:else}
       <div class="empty-state">
         <h3>Nenhum log encontrado</h3>
-        <p>Ajuste filtros ou atualize o painel.</p>
+        <p>Ajuste filtros ou atualize a coleta local.</p>
       </div>
     {/each}
   </div>
@@ -125,9 +164,9 @@
   .logs-panel {
     border: 1px solid var(--color-line);
     border-radius: 8px;
-    padding: 18px;
-    background: white;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    padding: var(--admin-panel-padding);
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-panel);
   }
 
   .section-heading,
@@ -145,8 +184,8 @@
 
   .section-heading {
     justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 14px;
+    gap: 18px;
+    margin-bottom: 20px;
   }
 
   h2 {
@@ -156,6 +195,7 @@
 
   .section-heading p,
   .log-head small,
+  .list-count,
   .empty-state p {
     color: var(--color-muted);
   }
@@ -167,16 +207,16 @@
 
   .filter-form {
     display: grid;
-    gap: 10px;
-    margin-bottom: 14px;
+    gap: 14px;
+    margin-bottom: 20px;
     border-top: 1px solid var(--color-line);
-    padding-top: 14px;
+    padding-top: 20px;
   }
 
   .filter-grid {
     display: grid;
     grid-template-columns: 120px 150px minmax(0, 1fr);
-    gap: 10px;
+    gap: 14px;
   }
 
   .field {
@@ -191,48 +231,50 @@
   .field select {
     width: 100%;
     min-height: 42px;
-    border: 1px solid var(--color-line);
     border-radius: 8px;
     padding: 0 11px;
-    background: #f8fafc;
-    color: var(--color-ink);
   }
 
   .filter-actions {
-    gap: 8px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .list-count {
+    margin: 0 0 12px;
+    font-size: 0.78rem;
+    font-weight: 850;
   }
 
   .ink-button,
   .ghost-button {
     min-height: 42px;
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 0 14px;
     font-size: 0.86rem;
     font-weight: 850;
   }
 
-  .ink-button {
-    border: 0;
-    background: var(--color-ink);
-    color: white;
-  }
-
-  .ghost-button {
-    border: 1px solid var(--color-line);
-    background: white;
-    color: var(--color-ink);
-  }
-
   .log-list {
     display: grid;
-    gap: 10px;
+    gap: var(--admin-row-gap);
   }
 
   .log-list article {
-    border: 1px solid #e2e8f0;
+    position: relative;
+    border: 1px solid var(--color-line);
     border-radius: 8px;
-    padding: 13px;
-    background: #fcfdff;
+    padding: 16px 16px 16px 18px;
+    background: var(--color-row);
+  }
+
+  .log-list article::before {
+    content: '';
+    position: absolute;
+    inset: 12px auto 12px 0;
+    width: 3px;
+    border-radius: 999px;
+    background: var(--state-info-text);
   }
 
   .log-main {
@@ -240,8 +282,10 @@
   }
 
   .log-head {
-    gap: 8px;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    width: 100%;
   }
 
   .log-head strong {
@@ -263,13 +307,25 @@
     overflow-wrap: anywhere;
   }
 
+  .details-block {
+    display: grid;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .details-block span {
+    color: var(--color-muted);
+    font-size: 0.68rem;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
   code {
     display: block;
-    margin-top: 8px;
     border-radius: 8px;
-    padding: 8px;
-    background: #f1f5f9;
-    color: #334155;
+    padding: 10px;
+    background: var(--state-neutral-bg);
+    color: var(--state-neutral-text);
     font-size: 0.75rem;
     line-height: 1.35;
     overflow-wrap: anywhere;
@@ -277,22 +333,28 @@
   }
 
   .level {
-    border-radius: 999px;
-    padding: 5px 8px;
-    background: #e0f2fe;
-    color: #075985;
+    background: var(--state-info-bg);
+    color: var(--state-info-text);
     font-size: 0.7rem;
     font-weight: 900;
   }
 
   .level.erro {
-    background: #fee2e2;
-    color: #991b1b;
+    background: var(--state-error-bg);
+    color: var(--state-error-text);
   }
 
   .level.aviso {
-    background: #fef9c3;
-    color: #854d0e;
+    background: var(--state-warning-bg);
+    color: var(--state-warning-text);
+  }
+
+  .log-list article:has(.level.erro)::before {
+    background: var(--state-error-text);
+  }
+
+  .log-list article:has(.level.aviso)::before {
+    background: var(--state-warning-text);
   }
 
   button:disabled {
@@ -303,8 +365,8 @@
   .empty-state {
     border: 1px dashed var(--color-line);
     border-radius: 8px;
-    padding: 18px;
-    background: #f8fafc;
+    padding: 22px;
+    background: var(--color-surface-subtle);
   }
 
   .empty-state h3 {
@@ -339,6 +401,10 @@
     .filter-actions {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    .log-head {
+      grid-template-columns: 1fr;
     }
   }
 </style>

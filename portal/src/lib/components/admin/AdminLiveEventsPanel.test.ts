@@ -22,9 +22,9 @@ describe('AdminLiveEventsPanel', () => {
     expect(screen.getByRole('heading', { name: 'Eventos ao vivo' })).toBeInTheDocument()
     expect(screen.getByText('Conectado')).toBeInTheDocument()
     expect(screen.getByText('Recebendo eventos em tempo real.')).toBeInTheDocument()
-    expect(screen.getByText(/Ultima atualizacao: 21\/05.*10:35/)).toBeInTheDocument()
+    expect(screen.getByText(/Última atualização: 21\/05.*10:35/)).toBeInTheDocument()
 
-    expect(screen.getByText('Usuarios')).toBeInTheDocument()
+    expect(screen.getByText('Usuários')).toBeInTheDocument()
     expect(screen.getByText('12/38')).toBeInTheDocument()
     expect(screen.getByText('Vouchers')).toBeInTheDocument()
     expect(screen.getByText('7/22')).toBeInTheDocument()
@@ -33,6 +33,7 @@ describe('AdminLiveEventsPanel', () => {
     expect(screen.getByText('19 aprovado')).toBeInTheDocument()
     expect(screen.getByText('Logs')).toBeInTheDocument()
     expect(screen.getByText('144')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Ver logs' })).toHaveAttribute('href', '/painel/logs')
   })
 
   it('renders disconnected state without snapshot', () => {

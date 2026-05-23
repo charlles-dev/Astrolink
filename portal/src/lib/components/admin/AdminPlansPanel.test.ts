@@ -33,15 +33,15 @@ describe('AdminPlansPanel', () => {
     })
 
     await fireEvent.input(screen.getByLabelText('Nome'), { target: { value: 'Noite Livre' } })
-    await fireEvent.input(screen.getByLabelText('Descricao'), { target: { value: 'Acesso noturno' } })
-    await fireEvent.input(screen.getByLabelText('Preco'), { target: { value: '9.90' } })
-    await fireEvent.input(screen.getByLabelText('Duracao (min)'), { target: { value: '480' } })
+    await fireEvent.input(screen.getByLabelText('Descrição'), { target: { value: 'Acesso noturno' } })
+    await fireEvent.input(screen.getByLabelText('Preço'), { target: { value: '9.90' } })
+    await fireEvent.input(screen.getByLabelText('Duração (min)'), { target: { value: '480' } })
     await fireEvent.input(screen.getByLabelText('Dados (MB)'), { target: { value: '2048' } })
     await fireEvent.input(screen.getByLabelText('Download (Mbps)'), { target: { value: '20' } })
     await fireEvent.input(screen.getByLabelText('Upload (Mbps)'), { target: { value: '8' } })
     await fireEvent.input(screen.getByLabelText('Ordem'), { target: { value: '3' } })
     await fireEvent.click(screen.getByLabelText('Recomendado'))
-    await fireEvent.click(screen.getByLabelText('Visivel no portal'))
+    await fireEvent.click(screen.getByLabelText('Visível no portal'))
     await fireEvent.click(screen.getByRole('button', { name: 'Salvar plano' }))
 
     expect(onSavePlan).toHaveBeenCalledWith({
@@ -71,9 +71,10 @@ describe('AdminPlansPanel', () => {
     })
 
     await fireEvent.click(screen.getByRole('button', { name: 'Editar Acesso 24 Horas' }))
-    expect(screen.getByRole('button', { name: 'Cancelar edicao' })).toBeInTheDocument()
+    expect(screen.getByText('Editando: Acesso 24 Horas')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancelar edição' })).toBeInTheDocument()
 
-    await fireEvent.input(screen.getByLabelText('Preco'), { target: { value: '18.50' } })
+    await fireEvent.input(screen.getByLabelText('Preço'), { target: { value: '18.50' } })
     await fireEvent.click(screen.getByRole('button', { name: 'Atualizar plano' }))
 
     expect(onSavePlan).toHaveBeenCalledWith(
@@ -82,9 +83,32 @@ describe('AdminPlansPanel', () => {
     )
 
     await fireEvent.click(screen.getByRole('button', { name: 'Editar Acesso 24 Horas' }))
-    await fireEvent.click(screen.getByRole('button', { name: 'Cancelar edicao' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancelar edição' }))
 
     expect(screen.getByRole('button', { name: 'Salvar plano' })).toBeInTheDocument()
+  })
+
+  it('blocks invalid numeric values instead of submitting them as zero', async () => {
+    const onSavePlan = vi.fn()
+
+    render(AdminPlansPanel, {
+      props: {
+        planos: [],
+        loading: false,
+        onSavePlan
+      }
+    })
+
+    await fireEvent.input(screen.getByLabelText('Nome'), { target: { value: 'Noite Livre' } })
+    await fireEvent.input(screen.getByLabelText('Preço'), { target: { value: 'abc' } })
+    await fireEvent.input(screen.getByLabelText('Download (Mbps)'), { target: { value: '' } })
+    await fireEvent.input(screen.getByLabelText('Upload (Mbps)'), { target: { value: 'abc' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Salvar plano' }))
+
+    expect(screen.getByText('Informe um preço válido.')).toBeInTheDocument()
+    expect(screen.getByText('Informe o download em Mbps.')).toBeInTheDocument()
+    expect(screen.getByText('Informe o upload em Mbps.')).toBeInTheDocument()
+    expect(onSavePlan).not.toHaveBeenCalled()
   })
 
   it('renders plan state and toggles active status', async () => {

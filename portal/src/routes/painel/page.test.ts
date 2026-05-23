@@ -72,7 +72,7 @@ beforeEach(() => {
         fields: [
           {
             key: 'ADMIN_USUARIO',
-            label: 'Usuario admin',
+            label: 'Usuário admin',
             description: 'Login do painel',
             secret: false,
             configured: true,
@@ -125,7 +125,7 @@ describe('Painel admin login', () => {
 
   it('keeps dashboard available when setup status fails', async () => {
     mockApi.getSetupStatus.mockRejectedValueOnce(
-      new APIError(404, 'erro_interno', 'Setup indisponivel')
+      new APIError(404, 'erro_interno', 'Setup indisponível')
     )
 
     render(Page)
@@ -135,15 +135,15 @@ describe('Painel admin login', () => {
     await waitFor(() => {
       expect(mockApi.getSetupStatus).toHaveBeenCalledWith('token-123')
     })
-    expect(screen.getByRole('heading', { name: 'Painel local' })).toBeInTheDocument()
-    expect(screen.getByText('Usuarios ativos')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Operação local' })).toBeInTheDocument()
+    expect(screen.getByText('Usuários ativos')).toBeInTheDocument()
   })
 
   it('saves setup env patches through the page API', async () => {
     await renderSetupPage()
 
     await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
-    await fireEvent.input(await screen.findByLabelText('Usuario admin'), {
+    await fireEvent.input(await screen.findByLabelText('Usuário admin'), {
       target: { value: 'operador' }
     })
     await fireEvent.click(screen.getByRole('button', { name: 'Salvar setup local' }))
@@ -155,25 +155,25 @@ describe('Painel admin login', () => {
 
   it('shows the 2FA code field when the backend requires TOTP', async () => {
     mockApi.loginAdmin.mockRejectedValueOnce(
-      new APIError(428, 'totp_obrigatorio', 'Informe o codigo 2FA')
+      new APIError(428, 'totp_obrigatorio', 'Informe o código 2FA')
     )
 
     render(Page)
 
     await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
 
-    expect(await screen.findByLabelText('Codigo 2FA')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Código 2FA')).toBeInTheDocument()
   })
 
   it('resubmits login with the TOTP code after 2FA is requested', async () => {
     mockApi.loginAdmin
-      .mockRejectedValueOnce(new APIError(428, 'totp_obrigatorio', 'Informe o codigo 2FA'))
+      .mockRejectedValueOnce(new APIError(428, 'totp_obrigatorio', 'Informe o código 2FA'))
       .mockRejectedValueOnce(new APIError(401, 'nao_autenticado', 'Credenciais invalidas'))
 
     render(Page)
 
     await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
-    await fireEvent.input(await screen.findByLabelText('Codigo 2FA'), {
+    await fireEvent.input(await screen.findByLabelText('Código 2FA'), {
       target: { value: '123456' }
     })
     await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)

@@ -11,6 +11,10 @@ describe('formatCountdown', () => {
   it('formats seconds as compact hours and minutes', () => {
     expect(formatCountdown(86399)).toBe('23h 59m')
   })
+
+  it('falls back safely when seconds are missing', () => {
+    expect(formatCountdown(undefined)).toBe('0m')
+  })
 })
 
 describe('maskVoucherCode', () => {

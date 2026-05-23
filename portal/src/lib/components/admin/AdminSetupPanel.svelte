@@ -35,8 +35,12 @@
 
   function fieldPlaceholder(field: SetupField) {
     if (field.secret && field.configured) return 'Configurado'
-    if (field.secret) return 'Nao configurado'
+    if (field.secret) return 'Não configurado'
     return ''
+  }
+
+  function fieldStatusLabel(field: SetupField) {
+    return field.configured ? 'Configurado' : 'Não configurado'
   }
 
   function updateValue(key: string, event: Event) {
@@ -62,7 +66,7 @@
     localMessage = ''
     const patch = Object.fromEntries(buildPatch())
     if (!Object.keys(patch).length) {
-      localMessage = 'Nenhuma alteracao para salvar'
+      localMessage = 'Nenhuma alteração para salvar'
       return
     }
     try {
@@ -73,24 +77,30 @@
   }
 </script>
 
-<section class="setup-panel" aria-labelledby="setup-title">
+<section class="setup-panel card" aria-labelledby="setup-title">
   <div class="section-heading">
     <div>
       <h2 id="setup-title">Setup local</h2>
-      <p>Variaveis pessoais do ambiente local.</p>
+      <p>Configuração segura do ambiente local e integrações sensíveis.</p>
     </div>
-    {#if setupStatus?.requires_restart}
-      <span class="restart-badge">Reiniciar</span>
-    {/if}
+    <span class={`setup-state ${setupStatus?.writable ? 'writable' : 'locked'}`}>
+      {setupStatus?.writable ? 'Editável' : 'Somente leitura'}
+    </span>
   </div>
 
   {#if setupMessage || localMessage}
     <p class="setup-message" role="status">{setupMessage || localMessage}</p>
   {/if}
 
+  {#if setupStatus?.requires_restart}
+    <p class="restart-alert" role="status" aria-label="Reinício necessário">
+      Reinicie o serviço para aplicar as alterações de setup local.
+    </p>
+  {/if}
+
   {#if !setupStatus}
     <div class="empty-state">
-      <h3>Setup indisponivel</h3>
+      <h3>Setup indisponível</h3>
       <p>Atualize o painel quando o endpoint local estiver ativo.</p>
     </div>
   {:else}
@@ -113,8 +123,14 @@
           <div class="field-grid">
             {#each group.fields as field (field.key)}
               <div class="field">
-                <span>{field.label}</span>
+                <span class="field-label">
+                  <span>{field.label}</span>
+                  <span class={`badge field-badge ${field.configured ? 'configured' : 'missing'}`}>
+                    {fieldStatusLabel(field)}
+                  </span>
+                </span>
                 <input
+                  class="input input-bordered"
                   id={field.key}
                   aria-label={field.label}
                   value={values[field.key] ?? ''}
@@ -125,6 +141,9 @@
                   disabled={loading || !setupStatus.writable}
                 />
                 <small>{field.description}</small>
+                {#if field.secret && field.configured}
+                  <small class="secret-help">Deixe em branco para manter o valor atual.</small>
+                {/if}
               </div>
             {/each}
           </div>
@@ -132,15 +151,15 @@
       {:else}
         <div class="empty-state compact">
           <h3>Nenhum campo publicado</h3>
-          <p>O backend ainda nao retornou grupos de configuracao.</p>
+          <p>O backend ainda não retornou grupos de configuração.</p>
         </div>
       {/each}
 
       <div class="setup-actions">
-        <span>{dirtyCount} {dirtyCount === 1 ? 'alteracao' : 'alteracoes'}</span>
+        <span>{dirtyCount} {dirtyCount === 1 ? 'alteração' : 'alterações'} pendentes</span>
         <button
           type="submit"
-          class="ink-button"
+          class="btn btn-primary ink-button"
           disabled={loading || !setupStatus.writable || dirtyCount === 0}
         >
           Salvar setup local
@@ -154,9 +173,9 @@
   .setup-panel {
     border: 1px solid var(--color-line);
     border-radius: 8px;
-    padding: 18px;
-    background: white;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    padding: var(--admin-panel-padding);
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-panel);
   }
 
   .section-heading,
@@ -173,8 +192,8 @@
 
   .section-heading {
     justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 14px;
+    gap: 18px;
+    margin-bottom: 20px;
   }
 
   h2 {
@@ -194,19 +213,34 @@
     font-size: 0.88rem;
   }
 
-  .restart-badge {
+  .setup-state {
+    flex: 0 0 auto;
+    border: 1px solid var(--color-line);
     border-radius: 999px;
-    padding: 6px 9px;
-    background: #fef9c3;
-    color: #854d0e;
-    font-size: 0.7rem;
+    padding: 7px 10px;
+    background: var(--color-surface-subtle);
+    color: var(--color-muted);
+    font-size: 0.72rem;
     font-weight: 900;
     text-transform: uppercase;
   }
 
+  .setup-state.writable {
+    border-color: var(--state-success-line);
+    background: var(--state-success-bg);
+    color: var(--state-success-text);
+  }
+
+  .setup-state.locked {
+    border-color: var(--state-warning-line);
+    background: var(--state-warning-bg);
+    color: var(--state-warning-text);
+  }
+
   .setup-message,
+  .restart-alert,
   .warning-message {
-    margin-bottom: 12px;
+    margin-bottom: 16px;
     border-radius: 8px;
     padding: 10px;
     font-size: 0.84rem;
@@ -215,32 +249,39 @@
   }
 
   .setup-message {
-    border: 1px solid #bae6fd;
-    background: #e0f2fe;
-    color: #075985;
+    border: 1px solid var(--state-info-line);
+    background: var(--state-info-bg);
+    color: var(--state-info-text);
   }
 
   .warning-message {
-    border: 1px solid #fde68a;
-    background: #fffbeb;
-    color: #92400e;
+    border: 1px solid var(--state-warning-line);
+    background: var(--state-warning-bg);
+    color: var(--state-warning-text);
+  }
+
+  .restart-alert {
+    border: 1px solid var(--state-warning-line);
+    background: var(--state-warning-bg);
+    color: var(--state-warning-text);
   }
 
   .setup-form {
     display: grid;
-    gap: 14px;
+    gap: 20px;
   }
 
   fieldset {
     min-width: 0;
     margin: 0;
-    border: 0;
-    border-top: 1px solid var(--color-line);
-    padding: 14px 0 0;
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    padding: 16px;
+    background: var(--color-row);
   }
 
   legend {
-    padding: 0 8px 0 0;
+    padding: 0 8px;
     color: var(--color-ink);
     font-size: 0.86rem;
     font-weight: 900;
@@ -249,36 +290,60 @@
   .field-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 10px;
+    gap: 14px;
+    margin-top: 14px;
   }
 
   .field {
     display: grid;
-    gap: 6px;
+    gap: 7px;
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    padding: 12px;
+    background: var(--color-surface-raised);
   }
 
-  .field span {
+  .field-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .field-label > span:first-child {
     color: var(--color-ink);
     font-size: 0.78rem;
     font-weight: 850;
   }
 
+  .field-badge {
+    flex: 0 0 auto;
+    font-size: 0.66rem;
+    font-weight: 900;
+  }
+
+  .field-badge.configured {
+    background: var(--state-success-bg);
+    color: var(--state-success-text);
+  }
+
+  .field-badge.missing {
+    background: var(--state-error-bg);
+    color: var(--state-error-text);
+  }
+
   input {
     width: 100%;
     min-height: 42px;
-    border: 1px solid var(--color-line);
     border-radius: 8px;
     padding: 0 11px;
-    background: #f8fafc;
-    color: var(--color-ink);
     font: inherit;
     font-size: 0.84rem;
     box-sizing: border-box;
   }
 
   input::placeholder {
-    color: #64748b;
+    color: var(--color-muted);
   }
 
   input:disabled {
@@ -291,11 +356,18 @@
     line-height: 1.35;
   }
 
+  .field .secret-help {
+    color: var(--color-muted);
+    font-weight: 800;
+  }
+
   .setup-actions {
     justify-content: flex-end;
-    gap: 10px;
-    border-top: 1px solid var(--color-line);
-    padding-top: 14px;
+    gap: 12px;
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    padding: 12px;
+    background: var(--color-surface-subtle);
   }
 
   .setup-actions span {
@@ -305,11 +377,8 @@
 
   .ink-button {
     min-height: 42px;
-    border: 0;
     border-radius: 8px;
     padding: 0 14px;
-    background: var(--color-ink);
-    color: white;
     font-size: 0.86rem;
     font-weight: 850;
   }
@@ -322,8 +391,8 @@
   .empty-state {
     border: 1px dashed var(--color-line);
     border-radius: 8px;
-    padding: 18px;
-    background: #f8fafc;
+    padding: 22px;
+    background: var(--color-surface-subtle);
   }
 
   .empty-state.compact {

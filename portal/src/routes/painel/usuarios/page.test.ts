@@ -74,7 +74,7 @@ describe('/painel/usuarios', () => {
     await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
 
     expect(
-      await screen.findByRole('heading', { name: 'Usuarios conectados' })
+      await screen.findByRole('heading', { name: 'Usuários conectados' })
     ).toBeInTheDocument()
   })
 })

@@ -43,6 +43,18 @@ const vouchers: AdminVoucher[] = [
   }
 ]
 
+function makeVoucher(id: number): AdminVoucher {
+  return {
+    id,
+    codigo: `VIP-${String(id).padStart(4, '0')}`,
+    plano: { id: 1, nome: 'Acesso 24 Horas' },
+    tipo: 'single_use',
+    usos_atuais: 0,
+    usos_maximos: 1,
+    ativo: true
+  }
+}
+
 describe('AdminVouchersPanel', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -85,5 +97,65 @@ describe('AdminVouchersPanel', () => {
     expect(within(tickets[0]).getByText('Valido somente ate a data indicada.')).toBeInTheDocument()
     expect(within(tickets[1]).getByText('Universal')).toBeInTheDocument()
     expect(within(tickets[1]).getByText('3/25')).toBeInTheDocument()
+  })
+
+  it('disables voucher controls while loading', () => {
+    render(AdminVouchersPanel, {
+      props: {
+        planos: [planoBase],
+        vouchers,
+        loading: true
+      }
+    })
+
+    expect(screen.getByLabelText('Prefixo')).toBeDisabled()
+    expect(screen.getByLabelText('Quantidade')).toBeDisabled()
+    expect(screen.getByLabelText('Código')).toBeDisabled()
+    expect(screen.getByLabelText('Lote')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Gerar vouchers' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Aplicar filtros' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Exportar CSV' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Gerar folha PDF' })).toBeDisabled()
+  })
+
+  it('shows the visible count when the voucher list is limited to eight', () => {
+    render(AdminVouchersPanel, {
+      props: {
+        planos: [planoBase],
+        vouchers: Array.from({ length: 10 }, (_, index) => makeVoucher(index + 1)),
+        loading: false
+      }
+    })
+
+    expect(screen.getByText('Mostrando 8 de 10 vouchers')).toBeInTheDocument()
+    expect(screen.getByText('Há mais 2 vouchers nos filtros atuais.')).toBeInTheDocument()
+    expect(screen.queryByText('VIP-0009')).not.toBeInTheDocument()
+  })
+
+  it('asks for inline context before deactivating a voucher and can cancel', async () => {
+    const onDeactivateVoucher = vi.fn()
+
+    render(AdminVouchersPanel, {
+      props: {
+        planos: [planoBase],
+        vouchers,
+        loading: false,
+        onDeactivateVoucher
+      }
+    })
+
+    const row = screen.getByRole('article', { name: 'Voucher VIPA-7777' })
+    await fireEvent.click(within(row).getByRole('button', { name: 'Desativar VIPA-7777' }))
+
+    expect(within(row).getByText('Desativar VIPA-7777? O código não poderá ser usado em novas ativações.')).toBeInTheDocument()
+
+    await fireEvent.click(within(row).getByRole('button', { name: 'Cancelar desativação de VIPA-7777' }))
+    expect(onDeactivateVoucher).not.toHaveBeenCalled()
+    expect(within(row).queryByText('Desativar VIPA-7777? O código não poderá ser usado em novas ativações.')).not.toBeInTheDocument()
+
+    await fireEvent.click(within(row).getByRole('button', { name: 'Desativar VIPA-7777' }))
+    await fireEvent.click(within(row).getByRole('button', { name: 'Confirmar desativação de VIPA-7777' }))
+
+    expect(onDeactivateVoucher).toHaveBeenCalledWith(7)
   })
 })

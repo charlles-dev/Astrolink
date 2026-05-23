@@ -10,6 +10,10 @@
 
   let editingPlan: Plano | null = null
 
+  $: activePlans = planos.filter((plano) => plano.ativo).length
+  $: visiblePlans = planos.filter((plano) => plano.visivel_portal).length
+  $: recommendedPlans = planos.filter((plano) => plano.recomendado).length
+
   async function savePlan(input: AdminPlanBody) {
     try {
       if (editingPlan) {
@@ -40,46 +44,82 @@
   }
 </script>
 
-<section class="plans-panel" aria-labelledby="planos-title">
+<section class="plans-panel card" aria-labelledby="planos-title">
   <div class="section-heading">
     <div>
       <h2 id="planos-title">Planos</h2>
-      <p>Oferta atual do portal.</p>
+      <p>{editingPlan ? `Editando: ${editingPlan.nome}` : 'Catálogo comercial publicado no portal local.'}</p>
     </div>
+    {#if editingPlan}
+      <button
+        type="button"
+        class="btn btn-outline ghost-button"
+        onclick={cancelEdit}
+        disabled={loading}
+        aria-label={`Cancelar edição de ${editingPlan.nome}`}
+      >
+        Cancelar
+      </button>
+    {/if}
   </div>
 
-  <AdminPlanForm plan={editingPlan} {loading} onSubmit={savePlan} onCancel={cancelEdit} />
+  <div class="plan-toolbar" aria-label="Resumo dos planos">
+    <span><strong>{planos.length}</strong> cadastrados</span>
+    <span><strong>{activePlans}</strong> ativos</span>
+    <span><strong>{visiblePlans}</strong> no portal</span>
+    <span><strong>{recommendedPlans}</strong> recomendados</span>
+  </div>
+
+  <div class="form-dock" class:editing={editingPlan}>
+    <AdminPlanForm plan={editingPlan} {loading} onSubmit={savePlan} onCancel={cancelEdit} />
+  </div>
 
   <div class="plan-admin-list" aria-label="Planos cadastrados">
+    {#if planos.length > 0}
+      <div class="list-head" aria-hidden="true">
+        <span>Plano</span>
+        <span>Oferta</span>
+        <span>Estado</span>
+        <span>Ações</span>
+      </div>
+    {/if}
+
     {#each planos as plano (plano.id)}
       <article aria-label={plano.nome}>
         <div class="plan-main">
           <div>
             <div class="title-row">
               <h3>{plano.nome}</h3>
-              <span class:inactive={!plano.ativo}>{plano.ativo ? 'Ativo' : 'Inativo'}</span>
+              <span class="badge" class:inactive={!plano.ativo}>{plano.ativo ? 'Ativo' : 'Inativo'}</span>
               {#if plano.recomendado}
-                <span>Recomendado</span>
+                <span class="badge">Recomendado</span>
               {/if}
             </div>
             <p>{plano.descricao || 'Sem descricao'}</p>
             <p class="plan-meta">
               <span>{plano.duracao_formatada}</span>
-              <span aria-hidden="true"> - </span>
-              <span>{plano.velocidade_down}/{plano.velocidade_up} Mbps</span>
               {#if plano.dados_mb}
                 <span aria-hidden="true"> - </span><span>{plano.dados_mb} MB</span>
               {/if}
             </p>
           </div>
+        </div>
+
+        <div class="plan-offer">
           <strong>{formatCurrency(plano.preco)}</strong>
+          <span>{plano.velocidade_down}/{plano.velocidade_up} Mbps</span>
+        </div>
+
+        <div class="plan-state">
+          <span class="state-dot" class:offline={!plano.ativo} aria-hidden="true"></span>
+          <span>{plano.visivel_portal ? 'Visível no portal' : 'Oculto no portal'}</span>
         </div>
 
         <div class="row-actions">
-          <button type="button" class="ghost-button" onclick={() => editPlan(plano)} disabled={loading}>
+          <button type="button" class="btn btn-outline ghost-button" onclick={() => editPlan(plano)} disabled={loading}>
             Editar <span class="sr-only">{plano.nome}</span>
           </button>
-          <button type="button" class="ghost-button" onclick={() => void toggleStatus(plano)} disabled={loading}>
+          <button type="button" class="btn btn-outline ghost-button" onclick={() => void toggleStatus(plano)} disabled={loading}>
             {plano.ativo ? 'Inativar' : 'Ativar'} <span class="sr-only">{plano.nome}</span>
           </button>
         </div>
@@ -97,17 +137,17 @@
   .plans-panel {
     border: 1px solid var(--color-line);
     border-radius: 8px;
-    padding: 18px;
-    background: white;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    padding: var(--admin-panel-padding);
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-panel);
   }
 
   .section-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 16px;
+    gap: 18px;
+    margin-bottom: 14px;
   }
 
   h2,
@@ -132,19 +172,80 @@
     font-size: 0.88rem;
   }
 
+  .plan-toolbar {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    background: var(--color-line);
+  }
+
+  .plan-toolbar span {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+    padding: 10px 12px;
+    background: var(--color-surface-subtle);
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 850;
+    text-transform: uppercase;
+  }
+
+  .plan-toolbar strong {
+    color: var(--color-ink);
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .form-dock {
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    padding: 14px;
+    background: var(--color-surface-subtle);
+  }
+
+  .form-dock.editing {
+    border-color: var(--state-info-line);
+    background: color-mix(in srgb, var(--state-info-bg) 34%, var(--color-surface-raised));
+  }
+
   .plan-admin-list {
     display: grid;
-    gap: 10px;
-    margin-top: 16px;
+    gap: 0;
+    margin-top: 14px;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    background: var(--color-line);
+  }
+
+  .list-head {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.5fr) minmax(120px, 0.55fr) minmax(140px, 0.65fr) minmax(180px, 0.75fr);
+    gap: 12px;
+    padding: 9px 12px;
+    background: var(--color-surface-muted);
+    color: var(--color-muted);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
   }
 
   .plan-admin-list article {
     display: grid;
+    grid-template-columns: minmax(220px, 1.5fr) minmax(120px, 0.55fr) minmax(140px, 0.65fr) minmax(180px, 0.75fr);
+    align-items: center;
     gap: 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 13px;
-    background: #fcfdff;
+    border: 0;
+    border-top: 1px solid var(--color-line);
+    border-radius: 0;
+    padding: 12px;
+    background: var(--color-row);
   }
 
   .plan-main,
@@ -155,28 +256,26 @@
   }
 
   .plan-main {
-    justify-content: space-between;
+    min-width: 0;
     gap: 12px;
   }
 
   .title-row {
     flex-wrap: wrap;
-    gap: 7px;
+    gap: 8px;
   }
 
   .title-row span {
-    border-radius: 999px;
-    padding: 3px 7px;
-    background: #dcfce7;
-    color: #166534;
+    background: var(--state-success-bg);
+    color: var(--state-success-text);
     font-size: 0.68rem;
     font-weight: 900;
     text-transform: uppercase;
   }
 
   .title-row .inactive {
-    background: #fee2e2;
-    color: #991b1b;
+    background: var(--state-error-bg);
+    color: var(--state-error-text);
   }
 
   .plan-admin-list h3,
@@ -186,7 +285,7 @@
   }
 
   .plan-admin-list p {
-    margin-top: 4px;
+    margin-top: 3px;
     font-size: 0.82rem;
     line-height: 1.35;
   }
@@ -197,10 +296,44 @@
     gap: 0 5px;
   }
 
-  .plan-admin-list strong {
+  .plan-offer {
+    display: grid;
+    gap: 3px;
+  }
+
+  .plan-offer strong {
     white-space: nowrap;
+    color: var(--color-ink);
     font-size: 0.95rem;
     font-weight: 920;
+  }
+
+  .plan-offer span,
+  .plan-state span:not(.state-dot) {
+    color: var(--color-muted);
+    font-size: 0.76rem;
+    font-weight: 850;
+  }
+
+  .plan-state {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .state-dot {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: var(--state-success-text);
+    box-shadow: 0 0 0 4px var(--state-success-bg);
+  }
+
+  .state-dot.offline {
+    background: var(--state-error-text);
+    box-shadow: 0 0 0 4px var(--state-error-bg);
   }
 
   .row-actions {
@@ -209,14 +342,20 @@
   }
 
   .ghost-button {
-    min-height: 36px;
-    border: 1px solid var(--color-line);
+    min-height: 38px;
+    border: 1px solid var(--color-line-strong);
     border-radius: 8px;
     padding: 0 11px;
-    background: white;
+    background: var(--color-surface-raised);
     color: var(--color-ink);
     font-size: 0.8rem;
     font-weight: 900;
+    box-shadow: none;
+  }
+
+  .ghost-button:hover {
+    border-color: color-mix(in srgb, var(--color-primary) 46%, var(--color-line-strong));
+    background: var(--color-surface-muted);
   }
 
   .ghost-button:disabled {
@@ -236,8 +375,8 @@
   .empty-state {
     border: 1px dashed var(--color-line);
     border-radius: 8px;
-    padding: 18px;
-    background: #f8fafc;
+    padding: 22px;
+    background: var(--color-surface-subtle);
   }
 
   .empty-state.compact {
@@ -250,7 +389,16 @@
   }
 
   @media (max-width: 520px) {
-    .plan-main,
+    .plan-toolbar,
+    .list-head,
+    .plan-admin-list article {
+      grid-template-columns: 1fr;
+    }
+
+    .list-head {
+      display: none;
+    }
+
     .row-actions {
       align-items: stretch;
       flex-direction: column;

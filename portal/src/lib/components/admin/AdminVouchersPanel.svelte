@@ -30,6 +30,10 @@
   let confirmDeactivateID: number | null = null
   let printSheetReady = false
 
+  $: activeVouchers = vouchers.filter((voucher) => voucher.ativo).length
+  $: inactiveVouchers = vouchers.length - activeVouchers
+  $: universalVouchers = vouchers.filter((voucher) => voucher.tipo === 'universal').length
+
   $: if (planos.length > 0 && !planos.some((plano) => plano.id === voucherPlanoID)) {
     voucherPlanoID = planos[0].id
   }
@@ -92,34 +96,52 @@
 
   function requestDeactivate(voucher: AdminVoucher) {
     if (!voucher.ativo) return
-    if (confirmDeactivateID === voucher.id) {
-      confirmDeactivateID = null
-      onDeactivateVoucher(voucher.id)
-      return
-    }
     confirmDeactivateID = voucher.id
+  }
+
+  function confirmDeactivate(voucher: AdminVoucher) {
+    confirmDeactivateID = null
+    onDeactivateVoucher(voucher.id)
+  }
+
+  function cancelDeactivate() {
+    confirmDeactivateID = null
   }
 </script>
 
-<section class="vouchers-panel" aria-labelledby="vouchers-title">
+<section class="vouchers-panel card" aria-labelledby="vouchers-title">
   <div class="voucher-operational">
     <div class="section-heading">
       <div>
         <h2 id="vouchers-title">Vouchers</h2>
-        <p>Codigos para vender em dinheiro.</p>
+        <p>Códigos para venda presencial e ativação assistida.</p>
       </div>
     </div>
 
+    <div class="voucher-toolbar" aria-label="Resumo de vouchers">
+      <span><strong>{vouchers.length}</strong> no filtro</span>
+      <span><strong>{activeVouchers}</strong> ativos</span>
+      <span><strong>{inactiveVouchers}</strong> inativos</span>
+      <span><strong>{universalVouchers}</strong> universais</span>
+    </div>
+
   <form
-    class="voucher-form"
+    class="voucher-form workbench"
     onsubmit={(event) => {
       event.preventDefault()
       submitVoucherForm()
     }}
   >
+    <div class="workbench-head">
+      <div>
+        <h3>Emitir lote</h3>
+        <p>Configure prefixo, plano e limites antes de imprimir ou exportar.</p>
+      </div>
+    </div>
+
     <label class="field">
       Plano
-      <select bind:value={voucherPlanoID} disabled={loading || planos.length === 0}>
+      <select class="select select-bordered" bind:value={voucherPlanoID} disabled={loading || planos.length === 0}>
         {#each planos as plano (plano.id)}
           <option value={plano.id}>{plano.nome}</option>
         {/each}
@@ -130,11 +152,11 @@
       <legend>Tipo</legend>
       <div class="type-options">
         <label class:active={voucherTipo === 'single_use'}>
-          <input type="radio" bind:group={voucherTipo} value="single_use" disabled={loading} />
+          <input class="radio radio-primary" type="radio" bind:group={voucherTipo} value="single_use" disabled={loading} />
           <span>Uso unico</span>
         </label>
         <label class:active={voucherTipo === 'universal'}>
-          <input type="radio" bind:group={voucherTipo} value="universal" disabled={loading} />
+          <input class="radio radio-primary" type="radio" bind:group={voucherTipo} value="universal" disabled={loading} />
           <span>Universal</span>
         </label>
       </div>
@@ -143,44 +165,51 @@
     <div class="form-grid">
       <label class="field">
         Prefixo
-        <input bind:value={voucherPrefixo} maxlength="6" autocomplete="off" />
+        <input class="input input-bordered" bind:value={voucherPrefixo} maxlength="6" autocomplete="off" disabled={loading} />
       </label>
       <label class="field">
         Quantidade
-        <input bind:value={voucherQuantidade} min="1" max="200" type="number" />
+        <input class="input input-bordered" bind:value={voucherQuantidade} min="1" max="200" type="number" disabled={loading} />
       </label>
     </div>
 
     <div class="form-grid" class:single-field={voucherTipo !== 'universal'}>
       <label class="field">
         Validade (dias)
-        <input bind:value={voucherValidadeDias} min="1" type="number" placeholder="Opcional" />
+        <input class="input input-bordered" bind:value={voucherValidadeDias} min="1" type="number" placeholder="Opcional" disabled={loading} />
       </label>
       {#if voucherTipo === 'universal'}
         <label class="field">
-          Usos maximos
-          <input bind:value={voucherUsosMaximos} min="1" type="number" />
+          Usos máximos
+          <input class="input input-bordered" bind:value={voucherUsosMaximos} min="1" type="number" disabled={loading} />
         </label>
       {/if}
     </div>
 
-    <button type="submit" class="ink-button wide" disabled={loading || planos.length === 0}>
+    <button type="submit" class="btn btn-primary ink-button wide" disabled={loading || planos.length === 0}>
       Gerar vouchers
     </button>
   </form>
 
   <form
-    class="filter-form"
+    class="filter-form workbench"
     aria-label="Filtros de vouchers"
     onsubmit={(event) => {
       event.preventDefault()
       applyFilters()
     }}
   >
+    <div class="workbench-head">
+      <div>
+        <h3>Consulta operacional</h3>
+        <p>Filtre por status, plano, código ou lote.</p>
+      </div>
+    </div>
+
     <div class="filter-grid">
       <label class="field">
         Status
-        <select bind:value={filtroStatus} disabled={loading}>
+        <select class="select select-bordered" bind:value={filtroStatus} disabled={loading}>
           <option value="ativo">Ativos</option>
           <option value="inativo">Inativos</option>
           <option value="todos">Todos</option>
@@ -189,7 +218,7 @@
 
       <label class="field">
         Plano do filtro
-        <select bind:value={filtroPlanoID} disabled={loading}>
+        <select class="select select-bordered" bind:value={filtroPlanoID} disabled={loading}>
           <option value="">Todos</option>
           {#each planos as plano (plano.id)}
             <option value={String(plano.id)}>{plano.nome}</option>
@@ -198,24 +227,24 @@
       </label>
 
       <label class="field">
-        Codigo
-        <input bind:value={filtroCodigo} autocomplete="off" maxlength="32" />
+        Código
+        <input class="input input-bordered" bind:value={filtroCodigo} autocomplete="off" maxlength="32" disabled={loading} />
       </label>
 
       <label class="field">
         Lote
-        <input bind:value={filtroLoteID} min="1" type="number" inputmode="numeric" />
+        <input class="input input-bordered" bind:value={filtroLoteID} min="1" type="number" inputmode="numeric" disabled={loading} />
       </label>
     </div>
 
     <div class="filter-actions">
-      <button type="submit" class="ink-button" disabled={loading}>Aplicar filtros</button>
-      <button type="button" class="ghost-button" onclick={exportCsv} disabled={loading}>
+      <button type="submit" class="btn btn-primary ink-button" disabled={loading}>Aplicar filtros</button>
+      <button type="button" class="btn btn-outline ghost-button" onclick={exportCsv} disabled={loading}>
         Exportar CSV
       </button>
       <button
         type="button"
-        class="ghost-button"
+        class="btn btn-outline ghost-button"
         onclick={printSheet}
         disabled={loading || vouchers.length === 0}
       >
@@ -224,34 +253,88 @@
     </div>
   </form>
 
+  {#if vouchers.length > 0}
+    <div class="list-summary" class:limited={vouchers.length > 8}>
+      <strong>Mostrando {Math.min(vouchers.length, 8)} de {vouchers.length} vouchers</strong>
+      {#if vouchers.length > 8}
+        <span>Há mais {vouchers.length - 8} vouchers nos filtros atuais.</span>
+      {/if}
+    </div>
+  {/if}
+
   <div class="voucher-list">
+    {#if vouchers.length > 0}
+      <div class="voucher-head" aria-hidden="true">
+        <span>Código</span>
+        <span>Plano e uso</span>
+        <span>Estado</span>
+        <span>Ações</span>
+      </div>
+    {/if}
+
     {#each vouchers.slice(0, 8) as voucher (voucher.id)}
-      <article>
+      <article aria-label={`Voucher ${voucher.codigo}`}>
         <div class="voucher-main">
           <div>
             <h3>{voucher.codigo}</h3>
-            <p>
-              {voucher.plano.nome} - {voucher.usos_atuais}/{voucher.usos_maximos ?? 1} uso
-              {#if voucher.lote_id}
-                - lote {voucher.lote_id}
-              {/if}
-            </p>
+            <p>{voucher.tipo === 'universal' ? 'Universal' : 'Uso único'}</p>
           </div>
         </div>
+
+        <div class="voucher-usage">
+          <strong>{voucher.plano.nome}</strong>
+          <span>
+            {voucher.usos_atuais}/{voucher.usos_maximos ?? 1} uso
+            {#if voucher.lote_id}
+              - lote {voucher.lote_id}
+            {/if}
+          </span>
+        </div>
+
+        <div class="voucher-state">
+          <span class="badge" class:inactive={!voucher.ativo}>{voucher.ativo ? 'ativo' : 'inativo'}</span>
+          {#if voucher.validade_em}
+            <small>validade registrada</small>
+          {/if}
+        </div>
+
         <div class="voucher-actions">
-          <span class:inactive={!voucher.ativo}>{voucher.ativo ? 'ativo' : 'inativo'}</span>
           {#if voucher.ativo}
-            <button
-              type="button"
-              class:confirming={confirmDeactivateID === voucher.id}
-              onclick={() => requestDeactivate(voucher)}
-              disabled={loading}
-              aria-label={confirmDeactivateID === voucher.id
-                ? `Confirmar desativacao ${voucher.codigo}`
-                : `Desativar ${voucher.codigo}`}
-            >
-              {confirmDeactivateID === voucher.id ? 'Confirmar' : 'Desativar'}
-            </button>
+            {#if confirmDeactivateID === voucher.id}
+              <div class="confirm-box">
+                <p>Desativar {voucher.codigo}? O código não poderá ser usado em novas ativações.</p>
+                <div>
+                  <button
+                    type="button"
+                    class="btn btn-outline danger-row-button confirming"
+                    onclick={() => confirmDeactivate(voucher)}
+                    disabled={loading}
+                    aria-label={`Confirmar desativação de ${voucher.codigo}`}
+                  >
+                    Confirmar
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-outline ghost-button"
+                    onclick={cancelDeactivate}
+                    disabled={loading}
+                    aria-label={`Cancelar desativação de ${voucher.codigo}`}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            {:else}
+              <button
+                type="button"
+                class="btn btn-outline danger-row-button"
+                onclick={() => requestDeactivate(voucher)}
+                disabled={loading}
+                aria-label={`Desativar ${voucher.codigo}`}
+              >
+                Desativar
+              </button>
+            {/if}
           {/if}
         </div>
       </article>
@@ -275,9 +358,9 @@
   .vouchers-panel {
     border: 1px solid var(--color-line);
     border-radius: 8px;
-    padding: 18px;
-    background: white;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    padding: var(--admin-panel-padding);
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-panel);
   }
 
   .section-heading,
@@ -294,8 +377,8 @@
 
   .section-heading {
     justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 16px;
+    gap: 18px;
+    margin-bottom: 14px;
   }
 
   h2 {
@@ -313,9 +396,66 @@
     font-size: 0.88rem;
   }
 
+  .voucher-toolbar {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    background: var(--color-line);
+  }
+
+  .voucher-toolbar span {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+    padding: 10px 12px;
+    background: var(--color-surface-subtle);
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 850;
+    text-transform: uppercase;
+  }
+
+  .voucher-toolbar strong {
+    color: var(--color-ink);
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .workbench {
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    padding: 12px;
+    background: var(--color-surface-subtle);
+  }
+
+  .workbench-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--color-line);
+    padding-bottom: 10px;
+  }
+
+  .workbench-head h3 {
+    color: var(--color-ink);
+    font-size: 0.9rem;
+    font-weight: 950;
+  }
+
+  .workbench-head p {
+    margin-top: 3px;
+    color: var(--color-muted);
+    font-size: 0.76rem;
+    font-weight: 800;
+  }
+
   .voucher-form {
     display: grid;
-    gap: 10px;
+    gap: 12px;
     margin-bottom: 14px;
   }
 
@@ -334,25 +474,20 @@
   .filter-form input,
   .filter-form select {
     width: 100%;
-    min-height: 42px;
-    border: 1px solid var(--color-line);
+    min-height: 38px;
     border-radius: 8px;
-    padding: 0 11px;
-    background: #f8fafc;
-    color: var(--color-ink);
+    padding: 0 10px;
   }
 
   .filter-form {
     display: grid;
-    gap: 10px;
+    gap: 12px;
     margin-bottom: 14px;
-    border-top: 1px solid var(--color-line);
-    padding-top: 14px;
   }
 
   .filter-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 120px minmax(160px, 1fr) minmax(140px, 1fr) 110px;
     gap: 10px;
   }
 
@@ -360,7 +495,7 @@
   .voucher-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
   }
 
   .filter-actions {
@@ -378,7 +513,7 @@
     top: 0;
     left: -10000px;
     width: 210mm;
-    background: white;
+    background: var(--color-surface);
   }
 
   .form-grid {
@@ -393,7 +528,7 @@
 
   .type-control {
     display: grid;
-    gap: 6px;
+    gap: 8px;
     border: 0;
     margin: 0;
     padding: 0;
@@ -408,12 +543,11 @@
   .type-options label {
     position: relative;
     display: flex;
-    min-height: 42px;
+    min-height: 38px;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--color-line);
     border-radius: 8px;
-    background: #f8fafc;
+    background: var(--color-surface-subtle);
     color: var(--color-muted);
     cursor: pointer;
     font-size: 0.82rem;
@@ -421,9 +555,9 @@
   }
 
   .type-options label.active {
-    border-color: #0f766e;
-    background: #ecfdf5;
-    color: #0f766e;
+    border-color: var(--color-primary);
+    background: var(--state-success-bg);
+    color: var(--color-primary-strong);
   }
 
   .type-options input {
@@ -432,23 +566,17 @@
   }
 
   .ink-button {
-    min-height: 42px;
-    border: 0;
-    border-radius: 12px;
+    min-height: 38px;
+    border-radius: 8px;
     padding: 0 14px;
-    background: var(--color-ink);
-    color: white;
     font-size: 0.86rem;
     font-weight: 850;
   }
 
   .ghost-button {
-    min-height: 42px;
-    border: 1px solid var(--color-line);
-    border-radius: 12px;
+    min-height: 38px;
+    border-radius: 8px;
     padding: 0 14px;
-    background: white;
-    color: var(--color-ink);
     font-size: 0.86rem;
     font-weight: 850;
   }
@@ -459,16 +587,64 @@
 
   .voucher-list {
     display: grid;
-    gap: 10px;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    background: var(--color-line);
+  }
+
+  .voucher-head {
+    display: grid;
+    grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1.1fr) minmax(120px, 0.6fr) minmax(190px, 0.85fr);
+    gap: 12px;
+    padding: 9px 12px;
+    background: var(--color-surface-muted);
+    color: var(--color-muted);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .list-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    border: 1px solid var(--color-line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--color-surface-subtle);
+    color: var(--color-ink);
+    font-size: 0.8rem;
+  }
+
+  .list-summary.limited {
+    border-color: var(--state-warning-line);
+    background: var(--state-warning-bg);
+  }
+
+  .list-summary strong,
+  .list-summary span {
+    font-weight: 850;
+  }
+
+  .list-summary span {
+    color: var(--state-warning-text);
   }
 
   .voucher-list article {
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1.1fr) minmax(120px, 0.6fr) minmax(190px, 0.85fr);
+    align-items: center;
     gap: 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 13px;
-    background: #fcfdff;
+    border: 0;
+    border-top: 1px solid var(--color-line);
+    border-radius: 0;
+    padding: 12px;
+    background: var(--color-row);
   }
 
   .voucher-main {
@@ -488,18 +664,42 @@
     font-size: 0.8rem;
   }
 
-  .voucher-list span {
-    border-radius: 999px;
-    padding: 6px 8px;
-    background: #dcfce7;
-    color: #166534;
+  .voucher-usage {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .voucher-usage strong {
+    color: var(--color-ink);
+    font-size: 0.82rem;
+    font-weight: 900;
+    overflow-wrap: anywhere;
+  }
+
+  .voucher-usage span,
+  .voucher-state small {
+    color: var(--color-muted);
+    font-size: 0.76rem;
+    font-weight: 800;
+  }
+
+  .voucher-state {
+    display: grid;
+    justify-items: start;
+    gap: 5px;
+  }
+
+  .voucher-state .badge {
+    background: var(--state-success-bg);
+    color: var(--state-success-text);
     font-size: 0.72rem;
     font-weight: 900;
   }
 
-  .voucher-list span.inactive {
-    background: #f1f5f9;
-    color: #64748b;
+  .voucher-state .badge.inactive {
+    background: var(--state-neutral-bg);
+    color: var(--state-neutral-text);
   }
 
   .voucher-actions {
@@ -508,20 +708,51 @@
   }
 
   .voucher-actions button {
-    min-height: 34px;
-    border: 1px solid #fecaca;
+    min-height: 36px;
+    border: 1px solid var(--state-error-line);
     border-radius: 8px;
     padding: 0 9px;
-    background: #fff1f2;
-    color: #9f1239;
+    background: var(--state-error-bg);
+    color: var(--state-error-text);
     font-size: 0.72rem;
     font-weight: 900;
   }
 
   .voucher-actions button.confirming {
-    border-color: #fb923c;
-    background: #ffedd5;
-    color: #9a3412;
+    border-color: var(--state-warning-line);
+    background: var(--state-warning-bg);
+    color: var(--state-warning-text);
+  }
+
+  .confirm-box {
+    display: grid;
+    gap: 8px;
+    max-width: 320px;
+    border: 1px solid var(--state-warning-line);
+    border-radius: 8px;
+    padding: 10px;
+    background: var(--state-warning-bg);
+  }
+
+  .confirm-box p {
+    color: var(--state-warning-text);
+    font-size: 0.78rem;
+    font-weight: 850;
+    line-height: 1.35;
+  }
+
+  .confirm-box div {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .confirm-box .ghost-button {
+    min-height: 36px;
+    border-color: var(--color-line-strong);
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-size: 0.72rem;
   }
 
   button:disabled {
@@ -532,8 +763,8 @@
   .empty-state {
     border: 1px dashed var(--color-line);
     border-radius: 8px;
-    padding: 18px;
-    background: #f8fafc;
+    padding: 22px;
+    background: var(--color-surface-subtle);
   }
 
   .empty-state.compact {
@@ -550,21 +781,25 @@
     font-size: 0.88rem;
   }
 
-  @media (max-width: 420px) {
+  @media (max-width: 640px) {
+    .voucher-toolbar,
     .form-grid,
     .type-options,
     .filter-grid,
-    .filter-actions {
+    .filter-actions,
+    .voucher-list article {
       grid-template-columns: 1fr;
     }
 
+    .voucher-head {
+      display: none;
+    }
+
     .filter-actions,
-    .voucher-list article,
     .voucher-actions {
       align-items: stretch;
     }
 
-    .voucher-list article,
     .voucher-actions {
       flex-direction: column;
     }
@@ -575,6 +810,12 @@
 
     .voucher-actions {
       width: 100%;
+    }
+
+    .list-summary,
+    .confirm-box div {
+      align-items: stretch;
+      flex-direction: column;
     }
   }
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/svelte'
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Page from './+page.svelte'
@@ -74,5 +74,74 @@ describe('/painel/logs', () => {
     await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
 
     expect(await screen.findByRole('heading', { name: 'Eventos ao vivo' })).toBeInTheDocument()
+  })
+
+  it('explains truncated logs and clears filters', async () => {
+    mockApi.getAdminLogs.mockResolvedValue({
+      total: 15,
+      logs: Array.from({ length: 15 }, (_, index) => ({
+        timestamp: `2026-05-21T10:${String(index).padStart(2, '0')}:00Z`,
+        nivel: 'erro',
+        tipo: 'backup',
+        mensagem: `Evento ${index + 1}`
+      }))
+    })
+
+    render(Page)
+
+    await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
+
+    expect(await screen.findByText('Mostrando 12 de 15 logs (limite de 12).')).toBeInTheDocument()
+    expect(screen.queryByText('Evento 13')).not.toBeInTheDocument()
+
+    await fireEvent.change(screen.getByLabelText('Nível'), { target: { value: 'erro' } })
+    await fireEvent.input(screen.getByLabelText('Tipo'), { target: { value: 'backup' } })
+    await fireEvent.input(screen.getByLabelText('Buscar texto'), { target: { value: 'memory' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros de logs' }))
+
+    await waitFor(() => {
+      expect(mockApi.getAdminLogs).toHaveBeenLastCalledWith('token-123', {
+        nivel: 'erro',
+        tipo: 'backup',
+        texto: 'memory'
+      })
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros de logs' }))
+
+    await waitFor(() => {
+      expect(mockApi.getAdminLogs).toHaveBeenLastCalledWith('token-123', {})
+    })
+    expect(screen.getByLabelText('Nível')).toHaveValue('')
+    expect(screen.getByLabelText('Tipo')).toHaveValue('')
+    expect(screen.getByLabelText('Buscar texto')).toHaveValue('')
+  })
+
+  it('blocks protected restore until file and exact confirmation are filled', async () => {
+    render(Page)
+
+    await fireEvent.submit(screen.getByRole('button', { name: 'Entrar' }).closest('form')!)
+
+    expect(
+      await screen.findByText('Informe o arquivo e digite RESTAURAR exatamente para validar.')
+    ).toBeInTheDocument()
+
+    const restoreButton = screen.getByRole('button', { name: 'Validar restore protegido' })
+    expect(restoreButton).toBeDisabled()
+
+    await fireEvent.input(screen.getByLabelText('Arquivo do backup'), {
+      target: { value: 'backup.sql' }
+    })
+    expect(restoreButton).toBeDisabled()
+
+    await fireEvent.input(screen.getByLabelText('Confirmação RESTAURAR'), {
+      target: { value: 'restaurar' }
+    })
+    expect(restoreButton).toBeDisabled()
+
+    await fireEvent.input(screen.getByLabelText('Confirmação RESTAURAR'), {
+      target: { value: 'RESTAURAR' }
+    })
+    expect(restoreButton).toBeEnabled()
   })
 })

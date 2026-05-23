@@ -17,6 +17,9 @@
   let inicio = ''
   let fim = ''
 
+  $: visiblePayments = pagamentos.slice(0, 10)
+  $: paymentsTruncated = pagamentos.length > visiblePayments.length
+
   function currentFilters(): AdminPaymentFilters {
     const filters: AdminPaymentFilters = {}
     if (status) filters.status = status
@@ -29,12 +32,25 @@
     onApplyPaymentFilters(currentFilters())
   }
 
+  function clearFilters() {
+    status = ''
+    inicio = ''
+    fim = ''
+    onApplyPaymentFilters({})
+  }
+
   function exportCsv() {
     onExportPayments(currentFilters())
   }
 
   function formatMoney(value: string) {
-    return `R$ ${value || '0.00'}`
+    const amount = Number(value || 0)
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    })
+      .format(Number.isFinite(amount) ? amount : 0)
+      .replace(/\u00a0/g, ' ')
   }
 
   function formatDate(value: string) {
@@ -48,22 +64,35 @@
       minute: '2-digit'
     })
   }
+
+  function statusLabel(value: string) {
+    const labels: Record<string, string> = {
+      pendente: 'Pendente',
+      aprovado: 'Aprovado',
+      cancelado: 'Cancelado',
+      expirado: 'Expirado'
+    }
+    return labels[value] ?? value
+  }
 </script>
 
-<section class="payments-panel" aria-labelledby="pagamentos-title">
+<section class="payments-panel card" aria-labelledby="pagamentos-title">
   <div class="section-heading">
     <div>
       <h2 id="pagamentos-title">Pagamentos</h2>
-      <p>PIX e liberacoes recentes.</p>
+      <p>Conciliação PIX local, liberações e divergências recentes.</p>
     </div>
-    <strong>{formatMoney(totais.valor_total)}</strong>
+    <div class="headline-total">
+      <span>Total conciliado</span>
+      <strong>{formatMoney(totais.valor_total)}</strong>
+    </div>
   </div>
 
   <div class="total-grid">
-    <span><b>{totais.pendente}</b> pendente</span>
-    <span><b>{totais.aprovado}</b> aprovado</span>
-    <span><b>{totais.cancelado}</b> cancelado</span>
-    <span><b>{totais.expirado}</b> expirado</span>
+    <span class="pending"><b>{totais.pendente}</b> pendentes</span>
+    <span class="approved"><b>{totais.aprovado}</b> aprovados</span>
+    <span class="canceled"><b>{totais.cancelado}</b> cancelados</span>
+    <span class="expired"><b>{totais.expirado}</b> expirados</span>
   </div>
 
   <form
@@ -77,7 +106,7 @@
     <div class="filter-grid">
       <label class="field">
         Status do pagamento
-        <select bind:value={status} disabled={loading}>
+        <select class="select select-bordered" bind:value={status} disabled={loading}>
           <option value="">Todos</option>
           <option value="pendente">Pendente</option>
           <option value="aprovado">Aprovado</option>
@@ -86,19 +115,19 @@
         </select>
       </label>
       <label class="field">
-        Inicio
-        <input bind:value={inicio} type="date" disabled={loading} />
+        Início
+        <input class="input input-bordered" bind:value={inicio} type="date" disabled={loading} />
       </label>
       <label class="field">
         Fim
-        <input bind:value={fim} type="date" disabled={loading} />
+        <input class="input input-bordered" bind:value={fim} type="date" disabled={loading} />
       </label>
     </div>
 
     <div class="filter-actions">
       <button
         type="submit"
-        class="ink-button"
+        class="btn btn-primary ink-button"
         disabled={loading}
         aria-label="Aplicar filtros de pagamentos"
       >
@@ -106,7 +135,16 @@
       </button>
       <button
         type="button"
-        class="ghost-button"
+        class="btn btn-outline ghost-button"
+        onclick={clearFilters}
+        disabled={loading}
+        aria-label="Limpar filtros de pagamentos"
+      >
+        Limpar filtros
+      </button>
+      <button
+        type="button"
+        class="btn btn-outline ghost-button"
         onclick={exportCsv}
         disabled={loading}
         aria-label="Exportar pagamentos CSV"
@@ -116,15 +154,27 @@
     </div>
   </form>
 
+  <p class="list-count">
+    {#if paymentsTruncated}
+      Mostrando {visiblePayments.length} de {pagamentos.length} pagamentos (limite de 10).
+    {:else}
+      Mostrando {visiblePayments.length} {visiblePayments.length === 1 ? 'pagamento' : 'pagamentos'}.
+    {/if}
+  </p>
+
   <div class="payment-list">
-    {#each pagamentos.slice(0, 10) as pagamento (pagamento.txid)}
+    {#each visiblePayments as pagamento (pagamento.txid)}
       <article>
         <div class="payment-main">
-          <h3>{pagamento.txid}</h3>
-          <p>{pagamento.plano?.nome ?? pagamento.descricao} - {pagamento.mac}</p>
+          <div class="payment-id">
+            <span>TXID</span>
+            <h3>{pagamento.txid}</h3>
+          </div>
+          <p>{pagamento.plano?.nome ?? pagamento.descricao}</p>
+          <small>{pagamento.mac}</small>
         </div>
         <div class="payment-meta">
-          <span class={`status ${pagamento.status}`}>{pagamento.status}</span>
+          <span class={`badge status ${pagamento.status}`}>{statusLabel(pagamento.status)}</span>
           <strong>{formatMoney(pagamento.valor)}</strong>
           <small>{formatDate(pagamento.created_at)}</small>
         </div>
@@ -132,7 +182,7 @@
     {:else}
       <div class="empty-state">
         <h3>Nenhum pagamento</h3>
-        <p>Ajuste filtros ou aguarde novas transacoes.</p>
+        <p>Ajuste filtros ou aguarde novas transações do gateway local.</p>
       </div>
     {/each}
   </div>
@@ -142,9 +192,9 @@
   .payments-panel {
     border: 1px solid var(--color-line);
     border-radius: 8px;
-    padding: 18px;
-    background: white;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    padding: var(--admin-panel-padding);
+    background: var(--color-surface-raised);
+    box-shadow: var(--shadow-panel);
   }
 
   .section-heading,
@@ -162,8 +212,8 @@
 
   .section-heading {
     justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 14px;
+    gap: 18px;
+    margin-bottom: 20px;
   }
 
   h2 {
@@ -174,6 +224,7 @@
   .section-heading p,
   .payment-list p,
   .payment-meta small,
+  .list-count,
   .empty-state p {
     color: var(--color-muted);
   }
@@ -183,7 +234,21 @@
     font-size: 0.88rem;
   }
 
-  .section-heading strong {
+  .headline-total {
+    display: grid;
+    gap: 2px;
+    justify-items: end;
+    text-align: right;
+  }
+
+  .headline-total span {
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 850;
+    text-transform: uppercase;
+  }
+
+  .headline-total strong {
     flex: 0 0 auto;
     font-size: 1.12rem;
     font-weight: 950;
@@ -192,19 +257,42 @@
   .total-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 8px;
-    margin-bottom: 14px;
+    gap: 12px;
+    margin-bottom: 20px;
   }
 
   .total-grid span {
-    border: 1px solid #e2e8f0;
+    position: relative;
+    border: 1px solid var(--color-line);
     border-radius: 8px;
-    padding: 9px;
-    background: #f8fafc;
+    padding: 12px 12px 12px 14px;
+    background: var(--color-surface-subtle);
     color: var(--color-muted);
     font-size: 0.76rem;
     font-weight: 800;
     overflow-wrap: anywhere;
+  }
+
+  .total-grid span::before {
+    content: '';
+    position: absolute;
+    inset: 10px auto 10px 0;
+    width: 3px;
+    border-radius: 999px;
+    background: var(--state-neutral-text);
+  }
+
+  .total-grid .approved::before {
+    background: var(--state-success-text);
+  }
+
+  .total-grid .pending::before {
+    background: var(--state-warning-text);
+  }
+
+  .total-grid .canceled::before,
+  .total-grid .expired::before {
+    background: var(--state-error-text);
   }
 
   .total-grid b {
@@ -216,16 +304,16 @@
 
   .filter-form {
     display: grid;
-    gap: 10px;
-    margin-bottom: 14px;
+    gap: 14px;
+    margin-bottom: 20px;
     border-top: 1px solid var(--color-line);
-    padding-top: 14px;
+    padding-top: 20px;
   }
 
   .filter-grid {
     display: grid;
     grid-template-columns: 1fr 150px 150px;
-    gap: 10px;
+    gap: 14px;
   }
 
   .field {
@@ -240,54 +328,63 @@
   .field select {
     width: 100%;
     min-height: 42px;
-    border: 1px solid var(--color-line);
     border-radius: 8px;
     padding: 0 11px;
-    background: #f8fafc;
-    color: var(--color-ink);
   }
 
   .filter-actions {
-    gap: 8px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .list-count {
+    margin: 0 0 12px;
+    font-size: 0.78rem;
+    font-weight: 850;
   }
 
   .ink-button,
   .ghost-button {
     min-height: 42px;
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 0 14px;
     font-size: 0.86rem;
     font-weight: 850;
   }
 
-  .ink-button {
-    border: 0;
-    background: var(--color-ink);
-    color: white;
-  }
-
-  .ghost-button {
-    border: 1px solid var(--color-line);
-    background: white;
-    color: var(--color-ink);
-  }
-
   .payment-list {
     display: grid;
-    gap: 10px;
+    gap: var(--admin-row-gap);
   }
 
   .payment-list article {
     justify-content: space-between;
-    gap: 12px;
-    border: 1px solid #e2e8f0;
+    gap: 16px;
+    border: 1px solid var(--color-line);
     border-radius: 8px;
-    padding: 13px;
-    background: #fcfdff;
+    padding: 16px;
+    background: var(--color-row);
+  }
+
+  .payment-list article:hover {
+    border-color: var(--color-muted);
   }
 
   .payment-main {
     min-width: 0;
+  }
+
+  .payment-id {
+    display: grid;
+    gap: 3px;
+  }
+
+  .payment-id span {
+    color: var(--color-muted);
+    font-size: 0.66rem;
+    font-weight: 900;
+    letter-spacing: 0;
+    text-transform: uppercase;
   }
 
   .payment-main h3 {
@@ -299,9 +396,19 @@
   }
 
   .payment-main p {
-    margin-top: 4px;
+    margin-top: 8px;
     font-size: 0.8rem;
     line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .payment-main small {
+    display: block;
+    margin-top: 3px;
+    color: var(--color-muted);
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    font-size: 0.74rem;
+    font-weight: 750;
     overflow-wrap: anywhere;
   }
 
@@ -323,28 +430,26 @@
   }
 
   .status {
-    border-radius: 999px;
-    padding: 5px 8px;
-    background: #f1f5f9;
-    color: #475569;
+    background: var(--state-neutral-bg);
+    color: var(--state-neutral-text);
     font-size: 0.7rem;
     font-weight: 900;
   }
 
   .status.aprovado {
-    background: #dcfce7;
-    color: #166534;
+    background: var(--state-success-bg);
+    color: var(--state-success-text);
   }
 
   .status.pendente {
-    background: #fef9c3;
-    color: #854d0e;
+    background: var(--state-warning-bg);
+    color: var(--state-warning-text);
   }
 
   .status.cancelado,
   .status.expirado {
-    background: #fee2e2;
-    color: #991b1b;
+    background: var(--state-error-bg);
+    color: var(--state-error-text);
   }
 
   button:disabled {
@@ -355,8 +460,8 @@
   .empty-state {
     border: 1px dashed var(--color-line);
     border-radius: 8px;
-    padding: 18px;
-    background: #f8fafc;
+    padding: 22px;
+    background: var(--color-surface-subtle);
   }
 
   .empty-state h3 {

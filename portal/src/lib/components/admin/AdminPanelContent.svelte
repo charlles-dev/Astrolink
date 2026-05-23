@@ -10,6 +10,7 @@
   import AdminPlansPanel from './AdminPlansPanel.svelte'
   import AdminSetupPanel from './AdminSetupPanel.svelte'
   import AdminUsersPanel from './AdminUsersPanel.svelte'
+  import AdminUsersSummary from './AdminUsersSummary.svelte'
   import AdminVouchersPanel from './AdminVouchersPanel.svelte'
   import type { AdminPanelPage } from './AdminShell.svelte'
   import type {
@@ -78,7 +79,7 @@
         snapshot={liveSnapshot}
         events={liveEvents}
       />
-      <AdminUsersPanel {usuarios} {loading} {onDisconnect} />
+      <AdminUsersSummary {usuarios} {loading} />
     </div>
   </section>
 {:else if activePage === 'usuarios'}
@@ -127,19 +128,19 @@
 <style>
   .overview-stack {
     display: grid;
-    gap: 16px;
+    gap: var(--admin-section-gap);
   }
 
   .overview-grid {
     display: grid;
     grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.2fr);
-    gap: 16px;
+    gap: var(--admin-section-gap);
   }
 
   .logs-grid {
     display: grid;
     grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.2fr) minmax(280px, 0.72fr);
-    gap: 16px;
+    gap: var(--admin-section-gap);
   }
 
   @media (max-width: 900px) {
